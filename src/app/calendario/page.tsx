@@ -8,6 +8,7 @@ import { Submit } from "../submit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+export const maxDuration = 15;
 
 export const CALENDAR_ERROR_MESSAGES: Record<string, string> = {
   access_denied: "A autorização foi cancelada ou recusada no Google.",
@@ -132,6 +133,11 @@ export default async function CalendarPage({
             {successMessage}
           </p>
         )}
+        {feed.accountErrors["_partial"] && (
+          <p className="notice" role="status">
+            ℹ️ {feed.accountErrors["_partial"]}
+          </p>
+        )}
 
         {!feed.isConfigured ? (
           <section className="calendar-unconfigured" aria-labelledby="unconfigured-title">
@@ -234,6 +240,14 @@ export default async function CalendarPage({
                                     >
                                       📅 {event.calendarName}
                                     </span>
+                                    {event.isMultiDay && (
+                                      <span
+                                        className="event-multiday-badge"
+                                        title="Evento que se estende por múltiplos dias"
+                                      >
+                                        Multi-dia
+                                      </span>
+                                    )}
                                     <span
                                       className="event-account-badge"
                                       title={`Conta: ${event.accountEmail}`}
