@@ -35,6 +35,7 @@ import {
   isValidCalendarHtmlLink,
   listCalendarAccounts,
   pLimitAll,
+  sanitizeCalendarColor,
   saveCalendarAccount,
   setFeedCache,
   MAX_CALENDARS_PER_ACCOUNT,
@@ -1776,5 +1777,306 @@ test("B6 & B7: Derivação dinâmica de offset de fuso e tratamento robusto de d
   assert.equal(getSPDateString("data-invalida-xyz"), "");
   assert.equal(getSPDateString(new Date("invalid")), "");
 });
+
+test("(a) Validação e descarte de cores maliciosas em calendarColor (sanitizeCalendarColor)", async () => {
+  // Testes unitários da função de sanitização
+  assert.equal(sanitizeCalendarColor("#039be5"), "#039be5");
+  assert.equal(sanitizeCalendarColor("#FFFFFF"), "#ffffff");
+  assert.equal(sanitizeCalendarColor("#1a2b3c"), "#1a2b3c");
+
+  // Injeções maliciosas e formatos inválidos devem ser descartados (undefined)
+  assert.equal(sanitizeCalendarColor("red;background:url(x)"), undefined);
+  assert.equal(sanitizeCalendarColor("javascript:alert(1)"), undefined);
+  assert.equal(sanitizeCalendarColor("expression(alert(1))"), undefined);
+  assert.equal(sanitizeCalendarColor("#123"), undefined); // 3 dígitos não aceitos
+  assert.equal(sanitizeCalendarColor("#12345"), undefined); // 5 dígitos
+  assert.equal(sanitizeCalendarColor("#1234567"), undefined); // 7 dígitos
+  assert.equal(sanitizeCalendarColor("blue"), undefined); // nome de cor css
+  assert.equal(sanitizeCalendarColor(""), undefined);
+  assert.equal(sanitizeCalendarColor("   "), undefined);
+  assert.equal(sanitizeCalendarColor(undefined), undefined);
+
+  // Teste integrado no getCalendarFeed: cor maliciosa do Google é descartada na origem
+  const testKey = randomBytes(32).toString("base64");
+  process.env.CALENDAR_TOKEN_KEY = testKey;
+  process.env.GOOGLE_CLIENT_ID = "test-client.google.com";
+  process.env.GOOGLE_CLIENT_SECRET = "test-secret";
+
+  const userColor = {
+    id: `user-color-${randomBytes(8).toString("hex")}`,
+    email: "color@example.test",
+    name: "Usuário Color",
+  };
+
+  invalidateCalendarCache(userColor.id);
+
+  await withDatabase(async (db) => {
+    await saveCalendarAccount(db, userColor, {
+      googleSub: "sub-color",
+      email: "color@gmail.test",
+      refreshTokenEnc: encryptToken("tok-color", testKey, `${userColor.id}:sub-color`),
+    });
+
+    const mockFetchColor = async (input: RequestInfo | URL) => {
+      const urlStr = String(input);
+      if (urlStr.includes("oauth2.googleapis.com/token")) {
+        return new Response(JSON.stringify({ access_token: "mock-acc" }), { status: 200 });
+      }
+      if (urlStr.includes("users/me/calendarList")) {
+        return new Response(
+          JSON.stringify({
+            items: [
+              {
+                id: "cal-malicious",
+                summary: "Calendário Injetor",
+                backgroundColor: "red;background:url(x)", // Injeção CSS
+                selected: true,
+              },
+              {
+                id: "cal-valid",
+                summary: "Calendário Normal",
+                backgroundColor: "#039BE5", // Válido
+                selected: true,
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+      if (urlStr.includes("cal-malicious/events")) {
+        return new Response(
+          JSON.stringify({
+            items: [
+              {
+                id: "ev-malicious",
+                summary: "Evento Malicioso",
+                start: { date: "2026-11-17" },
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+      if (urlStr.includes("cal-valid/events")) {
+        return new Response(
+          JSON.stringify({
+            items: [
+              {
+                id: "ev-valid",
+                summary: "Evento Normal",
+                start: { date: "2026-11-17" },
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response("Not found", { status: 404 });
+    };
+
+    const feed = await getCalendarFeed(
+      db,
+      userColor,
+      new Date("2026-11-17T12:00:00-03:00"),
+      mockFetchColor as typeof fetch,
+    );
+
+    const evMalicious = feed.events.find((e) => e.id === "ev-malicious")!;
+    const evValid = feed.events.find((e) => e.id === "ev-valid")!;
+
+    assert.equal(
+      evMalicious.calendarColor,
+      undefined,
+      "Valor malicioso em calendarColor deve ser descartado",
+    );
+    assert.equal(
+      evValid.calendarColor,
+      "#039be5",
+      "Cor hex válida de 6 dígitos deve ser aceita e normalizada",
+    );
+  });
+});
+
+test("(b) Distinção de erros HTTP: 403 permanente cacheia; timeout, 429 e 5xx NÃO cacheiam", async () => {
+  const testKey = randomBytes(32).toString("base64");
+  process.env.CALENDAR_TOKEN_KEY = testKey;
+  process.env.GOOGLE_CLIENT_ID = "test-client.google.com";
+  process.env.GOOGLE_CLIENT_SECRET = "test-secret";
+
+  await withDatabase(async (db) => {
+    // 1. Falha permanente de um calendário (403/404/410) NÃO marca isPartial e O FEED É CACHEADO
+    const user403 = {
+      id: `user-403-${randomBytes(8).toString("hex")}`,
+      email: "403@example.test",
+      name: "Usuário 403",
+    };
+    invalidateCalendarCache(user403.id);
+
+    await saveCalendarAccount(db, user403, {
+      googleSub: "sub-403",
+      email: "403@gmail.test",
+      refreshTokenEnc: encryptToken("tok-403", testKey, `${user403.id}:sub-403`),
+    });
+
+    let fetchCount403 = 0;
+    const mockFetch403 = async (input: RequestInfo | URL) => {
+      fetchCount403++;
+      const urlStr = String(input);
+      if (urlStr.includes("oauth2.googleapis.com/token")) {
+        return new Response(JSON.stringify({ access_token: "mock-acc" }), { status: 200 });
+      }
+      if (urlStr.includes("users/me/calendarList")) {
+        return new Response(
+          JSON.stringify({
+            items: [
+              { id: "primary", summary: "Principal", primary: true, selected: true },
+              { id: "cal-permissao-negada", summary: "Revogado", selected: true },
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+      if (urlStr.includes("cal-permissao-negada/events")) {
+        // Erro permanente 403 Forbidden
+        return new Response(JSON.stringify({ error: { code: 403, message: "Forbidden" } }), {
+          status: 403,
+        });
+      }
+      return new Response(
+        JSON.stringify({
+          items: [{ id: "ev-ok-1", summary: "Evento OK", start: { date: "2026-11-17" } }],
+        }),
+        { status: 200 },
+      );
+    };
+
+    const feed403_1 = await getCalendarFeed(
+      db,
+      user403,
+      new Date("2026-11-17T12:00:00-03:00"),
+      mockFetch403 as typeof fetch,
+    );
+    assert.equal(feed403_1.isPartial, false, "403 permanente em um calendário não deve marcar isPartial");
+    assert.equal(feed403_1.events.length, 1);
+    const countAfterFirst403 = fetchCount403;
+
+    // Segunda chamada para 403 deve usar o cache (fetchCount não se altera)
+    const feed403_2 = await getCalendarFeed(
+      db,
+      user403,
+      new Date("2026-11-17T12:00:00-03:00"),
+      mockFetch403 as typeof fetch,
+    );
+    assert.equal(
+      fetchCount403,
+      countAfterFirst403,
+      "Feed com falha permanente 403 deve ser cacheado para evitar repetição de ~46 chamadas",
+    );
+    assert.equal(feed403_2.events.length, 1);
+
+    // 2. Falha 429 Too Many Requests: MARCA isPartial e NÃO É CACHEADO
+    const user429 = {
+      id: `user-429-${randomBytes(8).toString("hex")}`,
+      email: "429@example.test",
+      name: "Usuário 429",
+    };
+    invalidateCalendarCache(user429.id);
+
+    await saveCalendarAccount(db, user429, {
+      googleSub: "sub-429",
+      email: "429@gmail.test",
+      refreshTokenEnc: encryptToken("tok-429", testKey, `${user429.id}:sub-429`),
+    });
+
+    let fetchCount429 = 0;
+    const mockFetch429 = async (input: RequestInfo | URL) => {
+      fetchCount429++;
+      const urlStr = String(input);
+      if (urlStr.includes("oauth2.googleapis.com/token")) {
+        return new Response(JSON.stringify({ access_token: "mock-acc" }), { status: 200 });
+      }
+      if (urlStr.includes("users/me/calendarList")) {
+        return new Response(
+          JSON.stringify({
+            items: [{ id: "primary", summary: "Principal", primary: true, selected: true }],
+          }),
+          { status: 200 },
+        );
+      }
+      // Retorna 429 Rate Limit
+      return new Response("Too Many Requests", { status: 429 });
+    };
+
+    const feed429_1 = await getCalendarFeed(
+      db,
+      user429,
+      new Date("2026-11-17T12:00:00-03:00"),
+      mockFetch429 as typeof fetch,
+    );
+    assert.equal(feed429_1.isPartial, true, "429 deve marcar isPartial");
+    const countAfterFirst429 = fetchCount429;
+
+    // Segunda chamada para 429 deve bater na rede de novo (NÃO foi cacheado)
+    await getCalendarFeed(
+      db,
+      user429,
+      new Date("2026-11-17T12:00:00-03:00"),
+      mockFetch429 as typeof fetch,
+    );
+    assert.ok(fetchCount429 > countAfterFirst429, "429 não deve ser cacheado");
+
+    // 3. Falha 5xx: MARCA isPartial e NÃO É CACHEADO
+    const user5xx = {
+      id: `user-5xx-${randomBytes(8).toString("hex")}`,
+      email: "5xx@example.test",
+      name: "Usuário 5xx",
+    };
+    invalidateCalendarCache(user5xx.id);
+
+    await saveCalendarAccount(db, user5xx, {
+      googleSub: "sub-5xx",
+      email: "5xx@gmail.test",
+      refreshTokenEnc: encryptToken("tok-5xx", testKey, `${user5xx.id}:sub-5xx`),
+    });
+
+    let fetchCount5xx = 0;
+    const mockFetch5xx = async (input: RequestInfo | URL) => {
+      fetchCount5xx++;
+      const urlStr = String(input);
+      if (urlStr.includes("oauth2.googleapis.com/token")) {
+        return new Response(JSON.stringify({ access_token: "mock-acc" }), { status: 200 });
+      }
+      if (urlStr.includes("users/me/calendarList")) {
+        return new Response(
+          JSON.stringify({
+            items: [{ id: "primary", summary: "Principal", primary: true, selected: true }],
+          }),
+          { status: 200 },
+        );
+      }
+      // Retorna 500 Internal Error
+      return new Response("Internal Server Error", { status: 500 });
+    };
+
+    const feed5xx_1 = await getCalendarFeed(
+      db,
+      user5xx,
+      new Date("2026-11-17T12:00:00-03:00"),
+      mockFetch5xx as typeof fetch,
+    );
+    assert.equal(feed5xx_1.isPartial, true, "5xx deve marcar isPartial");
+    const countAfterFirst5xx = fetchCount5xx;
+
+    // Segunda chamada para 5xx deve bater na rede de novo (NÃO foi cacheado)
+    await getCalendarFeed(
+      db,
+      user5xx,
+      new Date("2026-11-17T12:00:00-03:00"),
+      mockFetch5xx as typeof fetch,
+    );
+    assert.ok(fetchCount5xx > countAfterFirst5xx, "5xx não deve ser cacheado");
+  });
+});
+
 
 
