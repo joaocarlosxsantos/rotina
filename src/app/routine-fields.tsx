@@ -1,4 +1,10 @@
-import { ALL_WEEKDAYS, WEEKDAYS } from "../lib/rules";
+import {
+  ALL_WEEKDAYS,
+  WEEKDAYS,
+  dayKey,
+  type ActivitySchedule,
+} from "../lib/rules";
+import { ActivityRecurrence } from "./activity-recurrence";
 
 export function RoutineFields({
   prefix,
@@ -53,10 +59,16 @@ export function ActivityFields({
   prefix,
   name = "",
   time = null,
+  routineWeekdays = 127,
+  schedule = { weekdays: null, onceDate: null },
+  today = dayKey(),
 }: {
   prefix: string;
   name?: string;
   time?: string | null;
+  routineWeekdays?: number;
+  schedule?: ActivitySchedule;
+  today?: string;
 }) {
   return (
     <div className="activity-fields">
@@ -90,6 +102,12 @@ export function ActivityFields({
           Referência em São Paulo; não bloqueia a conclusão.
         </small>
       </div>
+      <ActivityRecurrence
+        prefix={prefix}
+        routineWeekdays={routineWeekdays}
+        schedule={schedule}
+        today={today}
+      />
     </div>
   );
 }

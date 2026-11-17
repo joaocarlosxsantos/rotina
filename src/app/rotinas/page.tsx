@@ -1,7 +1,7 @@
 import { requireCurrentUser } from "../../auth/server";
 import { getDatabase } from "../../db/client";
 import { catalog } from "../../lib/store";
-import { maskDays, WEEKDAYS } from "../../lib/rules";
+import { maskDays, WEEKDAYS, dayKey, scheduleSummary } from "../../lib/rules";
 import {
   createActivity,
   createRoutine,
@@ -22,6 +22,7 @@ export default async function Manage({
   searchParams: Promise<{ error?: string; success?: string }>;
 }) {
   const user = await requireCurrentUser();
+  const today = dayKey();
   const rows = await catalog(await getDatabase(), user);
   const query = await searchParams;
   const active = rows.filter((row) => row.archivedAt === null);
@@ -92,6 +93,12 @@ export default async function Manage({
                     <li key={activity.id}>
                       <div className="managed-activity">
                         <h4>{activity.name}</h4>
+                        <span className="activity-schedule">
+                          {scheduleSummary(activity, routine.weekdays)}
+                          {activity.onceDate && activity.onceDate < today
+                            ? " \u00b7 Data encerrada"
+                            : ""}
+                        </span>
                         <p className="schedule">
                           {activity.scheduledTime
                             ? `${activity.scheduledTime} · São Paulo`
@@ -117,6 +124,12 @@ export default async function Manage({
                               prefix={`edit-${activity.id}`}
                               name={activity.name}
                               time={activity.scheduledTime}
+                              routineWeekdays={routine.weekdays}
+                              schedule={{
+                                weekdays: activity.weekdays,
+                                onceDate: activity.onceDate,
+                              }}
+                              today={today}
                             />
                             <Submit>Salvar atividade</Submit>
                           </form>
@@ -138,7 +151,11 @@ export default async function Manage({
                 >
                   <input type="hidden" name="routineId" value={routine.id} />
                   <input type="hidden" name="returnTo" value="/rotinas" />
-                  <ActivityFields prefix={`new-${routine.id}`} />
+                  <ActivityFields
+                    prefix={`new-${routine.id}`}
+                    routineWeekdays={routine.weekdays}
+                    today={today}
+                  />
                   <Submit>Adicionar atividade</Submit>
                 </form>
               </details>

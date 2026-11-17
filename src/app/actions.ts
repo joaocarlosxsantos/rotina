@@ -15,7 +15,12 @@ import {
   archiveActivity,
   setUserPet,
 } from "../lib/store";
-import { completionMessage, InputError, skipMessage } from "../lib/rules";
+import {
+  completionMessage,
+  InputError,
+  skipMessage,
+  activityScheduleFromForm,
+} from "../lib/rules";
 
 async function mutate<T>(
   work: () => Promise<T>,
@@ -50,7 +55,12 @@ export async function createRoutine(form: FormData) {
   const user = await requireCurrentUser();
   await mutate(
     async () =>
-      addRoutine(await getDatabase(), user, form.get("name"), form.getAll("days")),
+      addRoutine(
+        await getDatabase(),
+        user,
+        form.get("name"),
+        form.getAll("days"),
+      ),
     "Rotina criada. Agora adicione suas atividades.",
     destination(form),
   );
@@ -60,10 +70,12 @@ export async function createActivity(form: FormData) {
   await mutate(
     async () =>
       addActivity(
-        await getDatabase(), user,
+        await getDatabase(),
+        user,
         form.get("routineId"),
         form.get("name"),
         form.get("time"),
+        activityScheduleFromForm(form),
       ),
     "Atividade adicionada à sua rotina.",
     destination(form),
@@ -75,7 +87,8 @@ export async function editRoutine(form: FormData) {
   await mutate(
     async () =>
       updateRoutine(
-        await getDatabase(), user,
+        await getDatabase(),
+        user,
         form.get("routineId"),
         form.get("name"),
         form.getAll("days"),
@@ -90,10 +103,12 @@ export async function editActivity(form: FormData) {
   await mutate(
     async () =>
       updateActivity(
-        await getDatabase(), user,
+        await getDatabase(),
+        user,
         form.get("activityId"),
         form.get("name"),
         form.get("time"),
+        activityScheduleFromForm(form),
       ),
     "Atividade atualizada.",
     destination(form),
@@ -103,7 +118,8 @@ export async function editActivity(form: FormData) {
 export async function hideRoutine(form: FormData) {
   const user = await requireCurrentUser();
   await mutate(
-    async () => archiveRoutine(await getDatabase(), user, form.get("routineId")),
+    async () =>
+      archiveRoutine(await getDatabase(), user, form.get("routineId")),
     "Rotina arquivada. Histórico e pontos preservados.",
     destination(form),
   );
@@ -112,7 +128,8 @@ export async function hideRoutine(form: FormData) {
 export async function hideActivity(form: FormData) {
   const user = await requireCurrentUser();
   await mutate(
-    async () => archiveActivity(await getDatabase(), user, form.get("activityId")),
+    async () =>
+      archiveActivity(await getDatabase(), user, form.get("activityId")),
     "Atividade arquivada. Histórico e pontos preservados.",
     destination(form),
   );
@@ -120,7 +137,8 @@ export async function hideActivity(form: FormData) {
 export async function finishActivity(form: FormData) {
   const user = await requireCurrentUser();
   await mutate(
-    async () => completeActivity(await getDatabase(), user, form.get("activityId")),
+    async () =>
+      completeActivity(await getDatabase(), user, form.get("activityId")),
     completionMessage,
   );
 }

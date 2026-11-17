@@ -6,6 +6,8 @@ import {
   POINTS_PER_ACTIVITY,
   SKIP_PENALTY,
   TIME_ZONE,
+  dayKey,
+  scheduleSummary,
 } from "../lib/rules";
 import {
   createActivity,
@@ -137,6 +139,9 @@ export default async function Home({
                     >
                       <div>
                         <span className="activity-name">{activity.name}</span>
+                        <span className="activity-schedule">
+                          {scheduleSummary(activity, routine.weekdays)}
+                        </span>
                         {activity.scheduledTime && (
                           <time
                             className="schedule"
@@ -189,7 +194,11 @@ export default async function Home({
                 >
                   <input type="hidden" name="routineId" value={routine.id} />
                   <h4 id={`add-${routine.id}`}>Adicionar atividade</h4>
-                  <ActivityFields prefix={`activity-${routine.id}`} />
+                  <ActivityFields
+                    prefix={`activity-${routine.id}`}
+                    routineWeekdays={routine.weekdays}
+                    today={dayKey(now)}
+                  />
                   <Submit>Adicionar</Submit>
                 </form>
               </section>

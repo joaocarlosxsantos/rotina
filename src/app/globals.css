@@ -2057,3 +2057,22 @@ summary {
     align-items: baseline;
   }
 }
+
+/* Activity recurrence: native radios and keyboard-operable day toggles. */
+.activity-recurrence { grid-column: 1 / -1; min-width: 0; border: 0; margin: 16px 0 0; padding: 0; }
+.activity-recurrence legend { font-weight: 600; margin-bottom: 8px; font-family: var(--font-sans); }
+.recurrence-modes { display: grid; gap: 8px; }
+.recurrence-modes label { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); background: var(--surface); cursor: pointer; }
+.recurrence-modes label:has(input:checked) { border-color: var(--primary); background: var(--pale); }
+.recurrence-modes input { width: 20px; height: 20px; min-height: 0; flex: 0 0 20px; margin: 0; padding: 0; accent-color: var(--primary); }
+.recurrence-days { display: grid; grid-template-columns: repeat(auto-fit, minmax(44px, 1fr)); gap: 6px; }
+.recurrence-days button, .recurrence-presets button { min-width: 44px; min-height: 48px; padding: 8px; color: var(--ink); background: var(--surface); border: 1px solid var(--line); font-size: 1rem; }
+.recurrence-days button[aria-pressed="true"] { color: var(--primary-text); background: var(--primary); border-color: var(--primary); text-decoration: underline; text-underline-offset: 4px; }
+.recurrence-days button:hover, .recurrence-presets button:hover { color: var(--ink); background: var(--pale); border-color: var(--line); }
+.recurrence-days button[aria-pressed="true"]:hover { color: var(--primary-text); background: var(--primary-hover); border-color: var(--primary-hover); }
+.recurrence-presets { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 12px; }
+.recurrence-error { color: var(--danger-text); background: var(--danger-soft); padding: 12px; font-family: var(--font-sans); }
+.recurrence-date { max-width: 100%; min-width: 0; }
+.recurrence-date label { display: block; margin-bottom: 6px; }
+.recurrence-date input { max-width: 100%; }
+.activity-schedule { display: block; color: var(--muted); font: 0.875rem/1.5 var(--font-sans); margin-top: 4px; overflow-wrap: anywhere; }

@@ -17,6 +17,15 @@ const TEXT = 4.5;
 const UI = 3;
 
 const PAIRS: Pair[] = [
+  { name: 'repetição: opção desmarcada', fg: 'ink', bg: 'surface', min: TEXT },
+  { name: 'repetição: opção marcada e hover', fg: 'ink', bg: 'pale', min: TEXT },
+  { name: 'repetição: chip selecionado', fg: 'primary-text', bg: 'primary', min: TEXT },
+  { name: 'repetição: chip selecionado em hover', fg: 'primary-text', bg: 'primary-hover', min: TEXT },
+  { name: 'repetição: borda no campo', fg: 'line', bg: 'surface', min: UI },
+  { name: 'repetição: borda no hover', fg: 'line', bg: 'pale', min: UI },
+  { name: 'repetição: erro de dias', fg: 'danger-text', bg: 'danger-soft', min: TEXT },
+  { name: 'repetição: foco no halo', fg: 'focus-ring', bg: 'focus-halo', min: UI },
+  { name: 'repetição: halo separa foco e selecionado', fg: 'focus-halo', bg: 'primary', min: UI },
   { name: 'texto do corpo no papel', fg: 'ink', bg: 'paper', min: TEXT },
   { name: 'texto do corpo na superfície', fg: 'ink', bg: 'surface', min: TEXT },
   { name: 'texto do corpo no painel', fg: 'ink', bg: 'pale', min: TEXT },
@@ -94,6 +103,13 @@ const PAIRS: Pair[] = [
   { name: 'halo de foco no perigo', fg: 'focus-halo', bg: 'danger', min: UI },
   { name: 'halo de foco no fantasma', fg: 'focus-halo', bg: 'green', min: UI },
 ];
+
+test('recorrência mantém alvos 44px, quebra de linha, fonte legível e seleção além da cor', () => {
+  assert.match(css, /\.recurrence-days\s*\{[^}]*repeat\(auto-fit, minmax\(44px, 1fr\)\)/);
+  assert.match(css, /\.recurrence-presets\s*\{[^}]*flex-wrap:\s*wrap/);
+  assert.match(css, /\.recurrence-days button, \.recurrence-presets button\s*\{[^}]*min-height:\s*48px/);
+  assert.match(css, /\.recurrence-days button\[aria-pressed="true"\]\s*\{[^}]*text-decoration:\s*underline/);
+});
 
 function parseTokens(source: string): Tokens {
   const tokens: Tokens = new Map();
