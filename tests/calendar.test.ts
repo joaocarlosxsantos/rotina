@@ -1008,3 +1008,451 @@ test("Proteção de rota: /calendario e endpoints do calendário exigem autentic
   assert.equal(isPublicAsset("/api/calendar/connect"), false);
   assert.equal(isPublicAsset("/api/calendar/callback"), false);
 });
+
+test("M1 & M2: Eventos multi-dia abrangem todos os dias com clamp para início da janela e end.date exclusivo", async () => {
+  const testKey = randomBytes(32).toString("base64");
+  process.env.CALENDAR_TOKEN_KEY = testKey;
+  process.env.GOOGLE_CLIENT_ID = "test-client.google.com";
+  process.env.GOOGLE_CLIENT_SECRET = "test-secret";
+
+  const userMultiDay = {
+    id: `user-md-${randomBytes(8).toString("hex")}`,
+    email: "multiday@example.test",
+    name: "Usuário MultiDay",
+  };
+
+  await withDatabase(async (db) => {
+    await saveCalendarAccount(db, userMultiDay, {
+      googleSub: "sub-multiday",
+      email: "multiday@gmail.test",
+      refreshTokenEnc: encryptToken("token-multiday", testKey, `${userMultiDay.id}:sub-multiday`),
+    });
+
+    const mockFetchMultiDay = async (input: RequestInfo | URL) => {
+      const urlStr = String(input);
+      if (urlStr.includes("oauth2.googleapis.com/token")) {
+        return new Response(JSON.stringify({ access_token: "mock-acc" }), { status: 200 });
+      }
+      if (urlStr.includes("users/me/calendarList")) {
+        return new Response(
+          JSON.stringify({
+            items: [{ id: "primary", summary: "Principal", primary: true, selected: true }],
+          }),
+          { status: 200 },
+        );
+      }
+      if (urlStr.includes("calendars/primary/events")) {
+        return new Response(
+          JSON.stringify({
+            items: [
+              // M1: Começou antes de hoje (dia 15) e vai até dia 18 (dia inteiro, end.date=2026-11-19 exclusivo => último dia 18)
+              // Janela começa em 2026-11-17. Deve sofrer clamp e aparecer nos dias 17 e 18.
+              {
+                id: "ev-clamp-all-day",
+                iCalUID: "uid-clamp-all-day",
+                summary: "Viagem Longa",
+                start: { date: "2026-11-15" },
+                end: { date: "2026-11-19" },
+              },
+              // M2: Dia inteiro normal de 3 dias (18, 19, 20): end.date exclusivo é 2026-11-21 => último dia é 2026-11-20
+              {
+                id: "ev-three-days",
+                iCalUID: "uid-three-days",
+                summary: "Conferência Tech",
+                start: { date: "2026-11-18" },
+                end: { date: "2026-11-21" },
+              },
+              // M2: Evento com horário que atravessa a meia-noite (22:00 de 17/11 até 03:00 de 18/11 em SP)
+              {
+                id: "ev-cross-midnight",
+                iCalUID: "uid-cross-midnight",
+                summary: "Plantão Noturno",
+                start: { dateTime: "2026-11-17T22:00:00-03:00" },
+                end: { dateTime: "2026-11-18T03:00:00-03:00" },
+              },
+              // Evento com horário que termina exatamente à meia-noite (00:00:00 em SP) => não invade o dia seguinte
+              {
+                id: "ev-ends-at-midnight",
+                iCalUID: "uid-ends-at-midnight",
+                summary: "Jantar de Aniversário",
+                start: { dateTime: "2026-11-17T20:00:00-03:00" },
+                end: { dateTime: "2026-11-18T00:00:00-03:00" },
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response("Not found", { status: 404 });
+    };
+
+    // Janela inicia em 2026-11-17
+    const feed = await getCalendarFeed(
+      db,
+      userMultiDay,
+      new Date("2026-11-17T12:00:00-03:00"),
+      mockFetchMultiDay as typeof fetch,
+    );
+
+    assert.equal(feed.isConfigured, true);
+
+    // M1: Viagem Longa deve aparecer nos dias 2026-11-17 e 2026-11-18
+    const viagemEntries = feed.events.filter((e) => e.title === "Viagem Longa");
+    assert.equal(viagemEntries.length, 2, "Viagem Longa deve aparecer em 2 dias da janela (clamp 17 e 18)");
+    assert.deepEqual(
+      viagemEntries.map((e) => e.startDateSP),
+      ["2026-11-17", "2026-11-18"],
+    );
+    assert.ok(viagemEntries.every((e) => e.isMultiDay === true));
+
+    // M2: Conferência Tech deve aparecer nos dias 18, 19 e 20 (end.date 21 exclusivo)
+    const confEntries = feed.events.filter((e) => e.title === "Conferência Tech");
+    assert.equal(confEntries.length, 3, "Conferência Tech de 3 dias deve ter 3 instâncias na janela");
+    assert.deepEqual(
+      confEntries.map((e) => e.startDateSP),
+      ["2026-11-18", "2026-11-19", "2026-11-20"],
+    );
+    assert.ok(confEntries.every((e) => e.isMultiDay === true));
+
+    // M2: Plantão Noturno atravessa a meia-noite (aparece em 17 e 18)
+    const plantaoEntries = feed.events.filter((e) => e.title === "Plantão Noturno");
+    assert.equal(plantaoEntries.length, 2, "Plantão Noturno atravessa meia-noite e deve aparecer em 17 e 18");
+    assert.deepEqual(
+      plantaoEntries.map((e) => e.startDateSP),
+      ["2026-11-17", "2026-11-18"],
+    );
+    assert.ok(plantaoEntries.every((e) => e.isMultiDay === true));
+
+    // Jantar termina exatamente às 00:00:00 => deve aparecer APENAS no dia 17
+    const jantarEntries = feed.events.filter((e) => e.title === "Jantar de Aniversário");
+    assert.equal(jantarEntries.length, 1, "Evento que termina exatamente às 00:00 não deve invadir o dia seguinte");
+    assert.equal(jantarEntries[0].startDateSP, "2026-11-17");
+    assert.equal(jantarEntries[0].isMultiDay, false);
+  });
+});
+
+test("B1 & B2: Ordenação primary first e paginação de calendarList e events até 3 páginas", async () => {
+  const testKey = randomBytes(32).toString("base64");
+  process.env.CALENDAR_TOKEN_KEY = testKey;
+  process.env.GOOGLE_CLIENT_ID = "test-client.google.com";
+  process.env.GOOGLE_CLIENT_SECRET = "test-secret";
+
+  const userPagination = {
+    id: `user-pag-${randomBytes(8).toString("hex")}`,
+    email: "pag@example.test",
+    name: "Usuário Paginação",
+  };
+
+  await withDatabase(async (db) => {
+    await saveCalendarAccount(db, userPagination, {
+      googleSub: "sub-pag",
+      email: "pag@gmail.test",
+      refreshTokenEnc: encryptToken("token-pag", testKey, `${userPagination.id}:sub-pag`),
+    });
+
+    const calendarListRequestedPages: string[] = [];
+    const eventsRequestedPages: string[] = [];
+
+    const mockFetchPagination = async (input: RequestInfo | URL) => {
+      const urlStr = String(input);
+      if (urlStr.includes("oauth2.googleapis.com/token")) {
+        return new Response(JSON.stringify({ access_token: "mock-acc" }), { status: 200 });
+      }
+
+      // Paginação em calendarList:
+      // Página 1 retorna 6 calendários secundários + nextPageToken="page2"
+      // Página 2 retorna 4 calendários incluindo o PRIMARY no final (testando B1 ordenação)
+      if (urlStr.includes("users/me/calendarList")) {
+        if (!urlStr.includes("pageToken=")) {
+          calendarListRequestedPages.push("page1");
+          return new Response(
+            JSON.stringify({
+              items: Array.from({ length: 6 }, (_, i) => ({
+                id: `sec-${i + 1}@group.calendar.google.com`,
+                summary: `Secundário ${i + 1}`,
+                selected: true,
+              })),
+              nextPageToken: "cal-page-2",
+            }),
+            { status: 200 },
+          );
+        } else if (urlStr.includes("pageToken=cal-page-2")) {
+          calendarListRequestedPages.push("page2");
+          return new Response(
+            JSON.stringify({
+              items: [
+                { id: "sec-7@group.calendar.google.com", summary: "Secundário 7", selected: true },
+                { id: "sec-8@group.calendar.google.com", summary: "Secundário 8", selected: true },
+                { id: "primary-account@gmail.com", summary: "Conta Principal", primary: true, selected: true },
+              ],
+            }),
+            { status: 200 },
+          );
+        }
+      }
+
+      // Paginação em events para o calendário primário:
+      // Testa consumo de páginas de eventos
+      if (urlStr.includes("primary-account%40gmail.com/events") || urlStr.includes("primary-account@gmail.com/events")) {
+        if (!urlStr.includes("pageToken=")) {
+          eventsRequestedPages.push("ev-page1");
+          return new Response(
+            JSON.stringify({
+              items: [{ id: "ev-p1", summary: "Evento P1", start: { date: "2026-11-17" } }],
+              nextPageToken: "token-ev-2",
+            }),
+            { status: 200 },
+          );
+        } else if (urlStr.includes("pageToken=token-ev-2")) {
+          eventsRequestedPages.push("ev-page2");
+          return new Response(
+            JSON.stringify({
+              items: [{ id: "ev-p2", summary: "Evento P2", start: { date: "2026-11-18" } }],
+            }),
+            { status: 200 },
+          );
+        }
+      }
+
+      return new Response(JSON.stringify({ items: [] }), { status: 200 });
+    };
+
+    const feed = await getCalendarFeed(
+      db,
+      userPagination,
+      new Date("2026-11-17T12:00:00-03:00"),
+      mockFetchPagination as typeof fetch,
+    );
+
+    assert.equal(feed.isConfigured, true);
+    // B2: Paginação consumida
+    assert.deepEqual(calendarListRequestedPages, ["page1", "page2"], "Deve consumir páginas do calendarList");
+    assert.deepEqual(eventsRequestedPages, ["ev-page1", "ev-page2"], "Deve consumir páginas de eventos");
+
+    // B1: primary estava na segunda página (índice 8 de 9), mas como tem primary: true,
+    // a ordenação garantiu que ele ficasse no topo dos 8 selecionados (não foi cortado)
+    const p1Event = feed.events.find((e) => e.id === "ev-p1");
+    const p2Event = feed.events.find((e) => e.id === "ev-p2");
+    assert.ok(p1Event, "Evento P1 do calendário principal deve estar presente");
+    assert.ok(p2Event, "Evento P2 do calendário principal deve estar presente");
+  });
+});
+
+test("B3 & M3: Deduplicação por iCalUID mescla nomes dos calendários e logs seguros não revelam dados", async () => {
+  const testKey = randomBytes(32).toString("base64");
+  process.env.CALENDAR_TOKEN_KEY = testKey;
+  process.env.GOOGLE_CLIENT_ID = "test-client.google.com";
+  process.env.GOOGLE_CLIENT_SECRET = "test-secret";
+
+  const userB3M3 = {
+    id: `user-b3m3-${randomBytes(8).toString("hex")}`,
+    email: "b3m3@example.test",
+    name: "Usuário B3 M3",
+  };
+
+  await withDatabase(async (db) => {
+    await saveCalendarAccount(db, userB3M3, {
+      googleSub: "sub-b3m3",
+      email: "b3m3@gmail.test",
+      refreshTokenEnc: encryptToken("token-b3m3", testKey, `${userB3M3.id}:sub-b3m3`),
+    });
+
+    const errorLogs: string[] = [];
+    const originalConsoleError = console.error;
+    console.error = (...args: unknown[]) => {
+      errorLogs.push(args.map(String).join(" "));
+    };
+
+    try {
+      const mockFetchB3M3 = async (input: RequestInfo | URL) => {
+        const urlStr = String(input);
+        if (urlStr.includes("oauth2.googleapis.com/token")) {
+          return new Response(JSON.stringify({ access_token: "mock-acc" }), { status: 200 });
+        }
+
+        if (urlStr.includes("users/me/calendarList")) {
+          return new Response(
+            JSON.stringify({
+              items: [
+                { id: "primary", summary: "Calendário Principal Secreto", primary: true, selected: true },
+                { id: "trabalho", summary: "Calendário de Trabalho Confidencial", selected: true },
+                { id: "cal-com-erro", summary: "Calendário Privado Falho", selected: true },
+              ],
+            }),
+            { status: 200 },
+          );
+        }
+
+        // Calendário principal tem Reunião Estratégica (iCalUID compartilhado) e um evento sem ID
+        if (urlStr.includes("primary/events")) {
+          return new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: "ev-orig-1",
+                  iCalUID: "shared-uid-12345@google.com",
+                  summary: "Reunião Estratégica",
+                  start: { dateTime: "2026-11-17T15:00:00-03:00" },
+                  end: { dateTime: "2026-11-17T16:00:00-03:00" },
+                },
+                {
+                  summary: "Sem ID 1",
+                  start: { dateTime: "2026-11-17T10:00:00-03:00" },
+                },
+                {
+                  summary: "Sem ID 2",
+                  start: { dateTime: "2026-11-17T10:00:00-03:00" },
+                },
+              ],
+            }),
+            { status: 200 },
+          );
+        }
+
+        // Calendário de trabalho tem o MESMO evento (mesmo iCalUID e horário, mas ID diferente no Google)
+        if (urlStr.includes("trabalho/events")) {
+          return new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: "ev-copy-work-2",
+                  iCalUID: "shared-uid-12345@google.com",
+                  summary: "Reunião Estratégica",
+                  start: { dateTime: "2026-11-17T15:00:00-03:00" },
+                  end: { dateTime: "2026-11-17T16:00:00-03:00" },
+                },
+              ],
+            }),
+            { status: 200 },
+          );
+        }
+
+        // Calendário com erro para testar M3 (logs limpos)
+        if (urlStr.includes("cal-com-erro/events")) {
+          return new Response("Unauthorized", { status: 401 });
+        }
+
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      };
+
+      const feed = await getCalendarFeed(
+        db,
+        userB3M3,
+        new Date("2026-11-17T12:00:00-03:00"),
+        mockFetchB3M3 as typeof fetch,
+      );
+
+      assert.equal(feed.isConfigured, true);
+
+      // B3: O evento compartilhado deve aparecer apenas UMA vez
+      const sharedEvs = feed.events.filter((e) => e.title === "Reunião Estratégica");
+      assert.equal(sharedEvs.length, 1, "Evento com mesmo iCalUID deve ser deduplicado em um único item");
+      assert.deepEqual(
+        sharedEvs[0].calendarNames,
+        ["Calendário Principal Secreto", "Calendário de Trabalho Confidencial"],
+        "calendarNames deve mesclar os calendários de origem",
+      );
+      assert.equal(
+        sharedEvs[0].calendarName,
+        "Calendário Principal Secreto, Calendário de Trabalho Confidencial",
+      );
+
+      // Itens anônimos sem ID não devem colapsar entre si
+      const semId1 = feed.events.find((e) => e.title === "Sem ID 1");
+      const semId2 = feed.events.find((e) => e.title === "Sem ID 2");
+      assert.ok(semId1 && semId2, "Itens sem ID não devem colapsar indevidamente");
+      assert.notEqual(semId1?.id, semId2?.id);
+
+      // M3: Logs de erro NÃO podem conter nomes sensíveis de calendário nem de resumo
+      assert.ok(errorLogs.length > 0, "Deve haver log de erro gerado para o calendário com 401");
+      for (const logLine of errorLogs) {
+        assert.ok(!logLine.includes("Calendário"), "Log não pode conter nome de calendário");
+        assert.ok(!logLine.includes("Privado"), "Log não pode conter nome de calendário");
+        assert.ok(!logLine.includes("Reunião"), "Log não pode conter resumo de evento");
+        assert.ok(!logLine.includes("Estratégica"), "Log não pode conter resumo de evento");
+        assert.match(logLine, /cal_hash=[0-9a-f]{8}/, "Log seguro deve conter apenas hash curto de calendarId");
+      }
+    } finally {
+      console.error = originalConsoleError;
+    }
+  });
+});
+
+test("M4: Concorrência limitada, deadline global com resultado parcial e cache de 60s com invalidação", async () => {
+  const testKey = randomBytes(32).toString("base64");
+  process.env.CALENDAR_TOKEN_KEY = testKey;
+  process.env.GOOGLE_CLIENT_ID = "test-client.google.com";
+  process.env.GOOGLE_CLIENT_SECRET = "test-secret";
+
+  const userM4 = {
+    id: `user-m4-${randomBytes(8).toString("hex")}`,
+    email: "m4@example.test",
+    name: "Usuário M4",
+  };
+
+  await withDatabase(async (db) => {
+    await saveCalendarAccount(db, userM4, {
+      googleSub: "sub-m4",
+      email: "m4@gmail.test",
+      refreshTokenEnc: encryptToken("token-m4", testKey, `${userM4.id}:sub-m4`),
+    });
+
+    let fetchCount = 0;
+    const mockFetchCache = async (input: RequestInfo | URL) => {
+      fetchCount++;
+      const urlStr = String(input);
+      if (urlStr.includes("oauth2.googleapis.com/token")) {
+        return new Response(JSON.stringify({ access_token: "mock-acc" }), { status: 200 });
+      }
+      if (urlStr.includes("users/me/calendarList")) {
+        return new Response(
+          JSON.stringify({
+            items: [{ id: "primary", summary: "Principal", primary: true, selected: true }],
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          items: [{ id: "ev-cache-1", summary: "Evento Cache", start: { date: "2026-11-17" } }],
+        }),
+        { status: 200 },
+      );
+    };
+
+    // 1. Primeira chamada busca da rede e popula o cache
+    const feed1 = await getCalendarFeed(
+      db,
+      userM4,
+      new Date("2026-11-17T12:00:00-03:00"),
+      mockFetchCache as typeof fetch,
+    );
+    assert.equal(feed1.events.length, 1);
+    const countAfterFirst = fetchCount;
+    assert.ok(countAfterFirst > 0);
+
+    // 2. Segunda chamada imediata usa cache (nenhum fetch novo)
+    const feed2 = await getCalendarFeed(
+      db,
+      userM4,
+      new Date("2026-11-17T12:00:00-03:00"),
+      mockFetchCache as typeof fetch,
+    );
+    assert.equal(fetchCount, countAfterFirst, "Segunda chamada consecutiva deve usar cache de 60s");
+    assert.equal(feed2.events.length, 1);
+
+    // 3. Invalidação ao remover conta
+    await deleteCalendarAccount(db, userM4, feed1.accounts[0].id);
+
+    // 4. Nova chamada após invalidação não usa o cache antigo (contas vazias)
+    const feed3 = await getCalendarFeed(
+      db,
+      userM4,
+      new Date("2026-11-17T12:00:00-03:00"),
+      mockFetchCache as typeof fetch,
+    );
+    assert.equal(feed3.accounts.length, 0);
+    assert.equal(feed3.events.length, 0);
+  });
+});
+
