@@ -30,10 +30,20 @@ Os testes usam Postgres real embarcado em PGlite, incluindo transações, constr
 
 - Concluir rende +10 e bônus `min(dias consecutivos incluindo hoje - 1, 5)` por conclusão. Pular registra -5, limitado ao saldo disponível; nunca há dívida ou saldo negativo. Não há pulo automático.
 - Um índice único por atividade/dia impede concluir e pular o mesmo item no mesmo dia. Repetir a mesma ação é idempotente; a oposta é rejeitada. UUID v4, nome 2–80, dias 0–6 e horário opcional HH:MM são validados no servidor.
-- Dias são civis em `America/Sao_Paulo`. Sequência exige pelo menos uma conclusão por dia corrido; várias conclusões contam como um dia, mas cada uma ganha o bônus correspondente. Pular não apaga conclusões; um dia inteiro sem conclusão quebra a sequência. Antes da primeira conclusão de hoje, a sequência atual mostra o trecho até ontem.
+- Dias são civis em `America/Sao_Paulo`. Sequência exige conclusão nos dias com atividade agendada; dias sem agenda são ignorados. Várias conclusões contam como um dia, mas cada uma ganha o bônus correspondente. Pular não apaga conclusões; um dia agendado inteiro sem conclusão quebra a sequência. Antes da primeira conclusão de hoje, a busca começa em ontem, ignorando dias sem agenda.
 - Humor: menos de 40% concluído fica triste; 40% a menos de 70%, ok; 70% ou mais, feliz. Sem atividades previstas, ok. Puladas permanecem no denominador, sem contar como concluídas.
-- Hoje filtra rotinas e atividades ativas pela agenda semanal em SP. Horário é referência opcional, sem bloquear conclusão antecipada. `/rotinas` edita e arquiva, preservando IDs e histórico. Não há exclusão ou restauração pela interface.
+- Hoje filtra rotinas e atividades ativas pelo agendamento efetivo em SP (herdado, dias próprios ou data única). Horário é referência opcional, sem bloquear conclusão antecipada. `/rotinas` edita e arquiva, preservando IDs e histórico. Não há exclusão ou restauração pela interface.
 - O histórico mostra os 30 registros mais recentes, com base, bônus, penalidade e saldo. Arquivar ou editar não altera pontos passados. Detalhes em `PRODUCT.md`.
+
+### Repetição por atividade
+
+Ao adicionar ou editar uma atividade, escolha **Segue a rotina**, **Dias da semana** ou **Só uma vez**. Dias próprios substituem os da rotina, inclusive fora dos dias dela. A data única usa o dia de São Paulo; depois dela a atividade sai das pendências de Hoje, mas permanece editável na gestão e no histórico. O formulário oferece atalhos Todos/Dias úteis/Fim de semana e exige pelo menos um dia no modo semanal.
+
+A migration `0004_parched_la_nuit.sql` adiciona `activities.weekdays` e `once_date`, ambas nullable, mais checks. Registros antigos NULL/NULL continuam herdando a rotina. Cliente antigo pode continuar inserindo/editando as colunas antigas; edição antiga não apaga os novos campos. Aplicação nesta tarefa: somente PGlite local, nunca produção. Use `npm run db:migrate` com o servidor local parado. Preview continua sem migrations.
+
+A base contava dias corridos na sequência, mesmo sem agenda. Esta feature segue a regra solicitada e ignora dias sem atividade prevista. A sequência exibida e o próximo bônus usam a agenda ativa atual, pois não existe versionamento de agendas; **nenhum lançamento passado é recalculado**. Agendas de outros usuários não interferem. Edições e lançamentos compartilham o lock por usuário.
+
+Testes específicos: `node --import tsx --test --test-concurrency=1 tests/activity-recurrence.test.ts tests/recurrence-fields.test.ts tests/migrations.test.ts tests/visibility-contrast.test.ts`. Cobrem herança/dias/data, viradas SP/semana/mês/ano, checks e compatibilidade da migration, isolamento A/B, sequência sem agenda, concorrência e componentes/contraste. Revisão de código da interface aprovada; QA visual real em 360/390 px continua com a Lupa pelo portal Maestri.
 
 ## Atomicidade Postgres
 
