@@ -26,9 +26,14 @@ import {
   CalendarAccountLimitError,
   deleteCalendarAccount,
   getCalendarFeed,
+  getCalendarWindowSP,
+  getSPDateString,
+  getTodayBoundsSP,
   isValidCalendarHtmlLink,
   listCalendarAccounts,
   saveCalendarAccount,
+  MAX_CALENDARS_PER_ACCOUNT,
+  MAX_FEED_EVENTS_TOTAL,
 } from "../src/lib/calendar/store";
 import { CALENDAR_ERROR_MESSAGES, CALENDAR_SUCCESS_MESSAGES } from "../src/app/calendario/page";
 import { routeRedirect } from "../src/auth/contracts";
@@ -680,6 +685,313 @@ test("Falha invalid_grant em uma conta é isolada e não derruba outras contas c
     assert.equal(feed.events.length, 1);
     assert.equal(feed.events[0].title, "Reunião de Alinhamento");
     assert.equal(feed.events[0].accountEmail, "ativa@estudos.test");
+  });
+});
+
+test("Janela de 7 dias getCalendarWindowSP: virada de dia, mês, ano e anos bissextos", () => {
+  // 1. Data regular: 17 de novembro de 2026 (SP = UTC-3)
+  const regularDate = new Date("2026-11-17T15:00:00Z"); // 12:00 em SP
+  const w1 = getCalendarWindowSP(regularDate, 7);
+  assert.equal(w1.startDateStr, "2026-11-17");
+  assert.equal(w1.endDateStr, "2026-11-24");
+  assert.equal(w1.timeMin, "2026-11-17T00:00:00-03:00");
+  assert.equal(w1.timeMax, "2026-11-24T00:00:00-03:00");
+  assert.equal(w1.dayKeys.length, 7);
+  assert.deepEqual(w1.dayKeys, [
+    "2026-11-17",
+    "2026-11-18",
+    "2026-11-19",
+    "2026-11-20",
+    "2026-11-21",
+    "2026-11-22",
+    "2026-11-23",
+  ]);
+
+  // getTodayBoundsSP compatível
+  const todayBounds = getTodayBoundsSP(regularDate);
+  assert.equal(todayBounds.dateStr, "2026-11-17");
+  assert.equal(todayBounds.timeMin, "2026-11-17T00:00:00-03:00");
+  assert.equal(todayBounds.timeMax, "2026-11-24T00:00:00-03:00");
+
+  // 2. Virada de mês: 28 de janeiro de 2026
+  const monthTurnDate = new Date("2026-01-28T14:00:00Z");
+  const wMonth = getCalendarWindowSP(monthTurnDate, 7);
+  assert.equal(wMonth.startDateStr, "2026-01-28");
+  assert.equal(wMonth.endDateStr, "2026-02-04");
+  assert.deepEqual(wMonth.dayKeys, [
+    "2026-01-28",
+    "2026-01-29",
+    "2026-01-30",
+    "2026-01-31",
+    "2026-02-01",
+    "2026-02-02",
+    "2026-02-03",
+  ]);
+
+  // 3. Virada de ano: 29 de dezembro de 2026
+  const yearTurnDate = new Date("2026-12-29T14:00:00Z");
+  const wYear = getCalendarWindowSP(yearTurnDate, 7);
+  assert.equal(wYear.startDateStr, "2026-12-29");
+  assert.equal(wYear.endDateStr, "2027-01-05");
+  assert.deepEqual(wYear.dayKeys, [
+    "2026-12-29",
+    "2026-12-30",
+    "2026-12-31",
+    "2027-01-01",
+    "2027-01-02",
+    "2027-01-03",
+    "2027-01-04",
+  ]);
+
+  // 4. Ano bissexto: 26 de fevereiro de 2024 (2024 é bissexto, inclui 29/02)
+  const leapYearDate = new Date("2024-02-26T14:00:00Z");
+  const wLeap = getCalendarWindowSP(leapYearDate, 7);
+  assert.equal(wLeap.startDateStr, "2024-02-26");
+  assert.equal(wLeap.endDateStr, "2024-03-04");
+  assert.deepEqual(wLeap.dayKeys, [
+    "2024-02-26",
+    "2024-02-27",
+    "2024-02-28",
+    "2024-02-29",
+    "2024-03-01",
+    "2024-03-02",
+    "2024-03-03",
+  ]);
+
+  // 5. Ano não bissexto: 26 de fevereiro de 2025 (2025 NÃO é bissexto, salta 28/02 para 01/03)
+  const nonLeapDate = new Date("2025-02-26T14:00:00Z");
+  const wNonLeap = getCalendarWindowSP(nonLeapDate, 7);
+  assert.equal(wNonLeap.startDateStr, "2025-02-26");
+  assert.equal(wNonLeap.endDateStr, "2025-03-05");
+  assert.deepEqual(wNonLeap.dayKeys, [
+    "2025-02-26",
+    "2025-02-27",
+    "2025-02-28",
+    "2025-03-01",
+    "2025-03-02",
+    "2025-03-03",
+    "2025-03-04",
+  ]);
+});
+
+test("Busca de múltiplos calendários: calendarList, filtros, feriados, dedupe e limites", async () => {
+  const testKey = randomBytes(32).toString("base64");
+  process.env.CALENDAR_TOKEN_KEY = testKey;
+  process.env.GOOGLE_CLIENT_ID = "test-client.google.com";
+  process.env.GOOGLE_CLIENT_SECRET = "test-secret";
+
+  const userMulti = {
+    id: `user-multi-${randomBytes(8).toString("hex")}`,
+    email: "multi@example.test",
+    name: "Usuário Multi Calendários",
+  };
+
+  await withDatabase(async (db) => {
+    await saveCalendarAccount(db, userMulti, {
+      googleSub: "sub-multi-calendars",
+      email: "principal@gmail.test",
+      refreshTokenEnc: encryptToken("token-multi", testKey, `${userMulti.id}:sub-multi-calendars`),
+    });
+
+    const mockFetch = async (input: RequestInfo | URL) => {
+      const urlStr = String(input);
+
+      if (urlStr.includes("oauth2.googleapis.com/token")) {
+        return new Response(JSON.stringify({ access_token: "access-token-multi" }), { status: 200 });
+      }
+
+      if (urlStr.includes("users/me/calendarList")) {
+        // Retorna lista com vários calendários (incluindo hidden, unselected, feriados e excedente de 8)
+        return new Response(
+          JSON.stringify({
+            items: [
+              { id: "primary", summary: "Principal Pessoal", selected: true },
+              {
+                id: "trabalho@group.calendar.google.com",
+                summary: "Trabalho",
+                summaryOverride: "Trabalho Rotina",
+                backgroundColor: "#039be5",
+                selected: true,
+              },
+              {
+                id: "pt.brazilian#holiday@group.v.calendar.google.com",
+                summary: "Feriados no Brasil",
+                selected: true,
+              },
+              { id: "oculto@group.calendar.google.com", summary: "Oculto", hidden: true },
+              { id: "desmarcado@group.calendar.google.com", summary: "Desmarcado", selected: false },
+              // Calendários adicionais para testar o teto de 8 calendários por conta
+              { id: "extra-1", summary: "Extra 1", selected: true },
+              { id: "extra-2", summary: "Extra 2", selected: true },
+              { id: "extra-3", summary: "Extra 3", selected: true },
+              { id: "extra-4", summary: "Extra 4", selected: true },
+              { id: "extra-5", summary: "Extra 5", selected: true }, // 8º selecionado
+              { id: "extra-6-excedente", summary: "Extra 6 Excedente", selected: true }, // 9º (deve ser ignorado)
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+
+      // Eventos do calendário primary
+      if (urlStr.includes("calendars/primary/events")) {
+        return new Response(
+          JSON.stringify({
+            items: [
+              {
+                id: "ev-1",
+                summary: "Consulta Médica",
+                start: { dateTime: "2026-11-17T14:00:00-03:00" },
+                end: { dateTime: "2026-11-17T15:00:00-03:00" },
+                htmlLink: "https://calendar.google.com/event?eid=1",
+              },
+              // Evento duplicado no mesmo id para testar dedupe
+              {
+                id: "ev-1",
+                summary: "Consulta Médica Duplicada",
+                start: { dateTime: "2026-11-17T14:00:00-03:00" },
+                htmlLink: "https://calendar.google.com/event?eid=1",
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+
+      // Eventos do calendário de trabalho
+      if (urlStr.includes("trabalho%40group.calendar.google.com") || urlStr.includes("trabalho@group.calendar.google.com")) {
+        return new Response(
+          JSON.stringify({
+            items: [
+              {
+                id: "ev-work-1",
+                summary: "Daily da Equipe",
+                start: { dateTime: "2026-11-17T10:00:00-03:00" },
+                end: { dateTime: "2026-11-17T10:30:00-03:00" },
+                htmlLink: "https://calendar.google.com/event?eid=work1",
+              },
+              {
+                id: "ev-work-2",
+                summary: "Planejamento Futuro",
+                start: { dateTime: "2026-11-20T09:00:00-03:00" },
+                end: { dateTime: "2026-11-20T10:00:00-03:00" },
+                htmlLink: "https://calendar.google.com/event?eid=work2",
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+
+      // Eventos do calendário de feriados (group.v.calendar.google.com)
+      if (urlStr.includes("holiday") || urlStr.includes("group.v.calendar.google.com")) {
+        return new Response(
+          JSON.stringify({
+            items: [
+              {
+                id: "ev-holiday-1",
+                summary: "Dia da Consciência Negra",
+                start: { date: "2026-11-20" },
+                end: { date: "2026-11-21" },
+                htmlLink: "https://www.google.com/calendar/event?eid=holiday1",
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+
+      // Simula erro 500 em um dos calendários extras para verificar que falha parcial NÃO quebra o feed
+      if (urlStr.includes("extra-1")) {
+        return new Response(JSON.stringify({ error: "internal_error" }), { status: 500 });
+      }
+
+      // Demais calendários vazios
+      return new Response(JSON.stringify({ items: [] }), { status: 200 });
+    };
+
+    const feed = await getCalendarFeed(db, userMulti, new Date("2026-11-17T12:00:00-03:00"), mockFetch as typeof fetch);
+
+    assert.equal(feed.isConfigured, true);
+    assert.equal(feed.accounts.length, 1);
+    assert.equal(feed.events.length, 4, "Deve conter os 4 eventos únicos após deduplicação");
+
+    // Validações de dedupe e atributos dos eventos
+    const evIds = feed.events.map((e) => e.id);
+    assert.equal(evIds.filter((id) => id === "ev-1").length, 1, "Dedupe deve manter ev-1 apenas uma vez");
+
+    // Validação de nomes e propriedades de calendários
+    const evWork = feed.events.find((e) => e.id === "ev-work-1")!;
+    assert.equal(evWork.calendarName, "Trabalho Rotina", "Deve usar summaryOverride se fornecido");
+    assert.equal(evWork.calendarColor, "#039be5");
+    assert.equal(evWork.isSpecialCalendar, false);
+
+    const evHoliday = feed.events.find((e) => e.id === "ev-holiday-1")!;
+    assert.equal(evHoliday.calendarName, "Feriados no Brasil");
+    assert.equal(evHoliday.isAllDay, true, "Feriados devem entrar como dia inteiro");
+    assert.equal(evHoliday.isSpecialCalendar, true, "Calendário group.v.calendar deve ter isSpecialCalendar=true");
+
+    // Validação da ordenação:
+    // No dia 2026-11-20 temos evHoliday (dia inteiro) e evWork2 (09:00)
+    // No mesmo dia, dia inteiro deve vir primeiro!
+    const day20Events = feed.events.filter((e) => e.startDateSP === "2026-11-20");
+    assert.equal(day20Events.length, 2);
+    assert.equal(day20Events[0].id, "ev-holiday-1", "Dia inteiro deve vir primeiro no mesmo dia");
+    assert.equal(day20Events[1].id, "ev-work-2", "Evento com horário vem após dia inteiro");
+  });
+});
+
+test("Feed com calendarList vazio ou com falha faz fallback seguro para primary", async () => {
+  const testKey = randomBytes(32).toString("base64");
+  process.env.CALENDAR_TOKEN_KEY = testKey;
+  process.env.GOOGLE_CLIENT_ID = "test-client.google.com";
+  process.env.GOOGLE_CLIENT_SECRET = "test-secret";
+
+  const userFallback = {
+    id: `user-fb-${randomBytes(8).toString("hex")}`,
+    email: "fallback@example.test",
+    name: "Usuário Fallback",
+  };
+
+  await withDatabase(async (db) => {
+    await saveCalendarAccount(db, userFallback, {
+      googleSub: "sub-fallback",
+      email: "fallback@gmail.test",
+      refreshTokenEnc: encryptToken("token-fallback", testKey, `${userFallback.id}:sub-fallback`),
+    });
+
+    const mockFetchFallback = async (input: RequestInfo | URL) => {
+      const urlStr = String(input);
+      if (urlStr.includes("oauth2.googleapis.com/token")) {
+        return new Response(JSON.stringify({ access_token: "mock-acc" }), { status: 200 });
+      }
+      // calendarList retorna 500
+      if (urlStr.includes("users/me/calendarList")) {
+        return new Response("Erro interno", { status: 500 });
+      }
+      // primary responde com 1 evento
+      if (urlStr.includes("calendars/primary/events")) {
+        return new Response(
+          JSON.stringify({
+            items: [
+              {
+                id: "ev-fb-1",
+                summary: "Evento Primário Fallback",
+                start: { dateTime: "2026-11-17T16:00:00-03:00" },
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response("Not found", { status: 404 });
+    };
+
+    const feed = await getCalendarFeed(db, userFallback, new Date("2026-11-17T12:00:00-03:00"), mockFetchFallback as typeof fetch);
+    assert.equal(feed.isConfigured, true);
+    assert.equal(feed.events.length, 1);
+    assert.equal(feed.events[0].title, "Evento Primário Fallback");
+    assert.equal(feed.events[0].calendarName, "Principal");
   });
 });
 
