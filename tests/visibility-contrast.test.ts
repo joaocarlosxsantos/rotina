@@ -290,3 +290,16 @@ test('cores de interface ficam centralizadas nos tokens do globals.css', () => {
     .filter((line) => /#[0-9a-f]{3,8}\b/i.test(line));
   assert.deepEqual(outsideTokens, [], `CoresFixasForaDosTokens:\n${outsideTokens.join('\n')}`);
 });
+
+test('B8 & B9: Componentes de calendário usam tokens AA, sem opacity em special card e com flex-wrap', () => {
+  assert.match(css, /\.calendar-day-header\s*\{[\s\S]*?flex-wrap:\s*wrap;/);
+  assert.match(css, /\.calendar-day-header\s*\{[\s\S]*?min-width:\s*0;/);
+
+  assert.match(css, /\.event-special-card\s*\{[\s\S]*?background:\s*var\(--surface\);/);
+  assert.doesNotMatch(css, /\.event-special-card\s*\{[\s\S]*?opacity:/, 'event-special-card não deve ter opacity para preservar contraste AA');
+
+  assert.match(css, /\.event-multiday-badge\s*\{[\s\S]*?color:\s*var\(--muted\);/);
+  assert.match(css, /\.event-multiday-badge\s*\{[\s\S]*?background:\s*var\(--pale\);/);
+  assert.match(css, /\.event-multiday-badge\s*\{[\s\S]*?font-size:\s*var\(--text-small\);/);
+});
+

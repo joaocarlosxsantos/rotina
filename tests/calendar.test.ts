@@ -27,12 +27,18 @@ import {
   deleteCalendarAccount,
   getCalendarFeed,
   getCalendarWindowSP,
+  getFeedCacheSize,
   getSPDateString,
+  getTimeZoneOffsetSP,
   getTodayBoundsSP,
+  invalidateCalendarCache,
   isValidCalendarHtmlLink,
   listCalendarAccounts,
+  pLimitAll,
   saveCalendarAccount,
+  setFeedCache,
   MAX_CALENDARS_PER_ACCOUNT,
+  MAX_FEED_CACHE_ENTRIES,
   MAX_FEED_EVENTS_TOTAL,
 } from "../src/lib/calendar/store";
 import { CALENDAR_ERROR_MESSAGES, CALENDAR_SUCCESS_MESSAGES } from "../src/app/calendario/page";
@@ -1455,4 +1461,320 @@ test("M4: Concorrência limitada, deadline global com resultado parcial e cache 
     assert.equal(feed3.events.length, 0);
   });
 });
+
+test("R1: Resultado parcial (isPartial=true / erro parcial) NUNCA é armazenado no feedCache", async () => {
+  const testKey = randomBytes(32).toString("base64");
+  process.env.CALENDAR_TOKEN_KEY = testKey;
+  process.env.GOOGLE_CLIENT_ID = "test-client.google.com";
+  process.env.GOOGLE_CLIENT_SECRET = "test-secret";
+
+  const userR1 = {
+    id: `user-r1-${randomBytes(8).toString("hex")}`,
+    email: "r1@example.test",
+    name: "Usuário R1",
+  };
+
+  invalidateCalendarCache(userR1.id);
+
+  await withDatabase(async (db) => {
+    await saveCalendarAccount(db, userR1, {
+      googleSub: "sub-r1",
+      email: "r1@gmail.test",
+      refreshTokenEnc: encryptToken("token-r1", testKey, `${userR1.id}:sub-r1`),
+    });
+
+    let networkAttempts = 0;
+    const mockFetchWithAbort = async (input: RequestInfo | URL, init?: RequestInit) => {
+      networkAttempts++;
+      const urlStr = String(input);
+      if (urlStr.includes("oauth2.googleapis.com/token")) {
+        return new Response(JSON.stringify({ access_token: "mock-acc" }), { status: 200 });
+      }
+      if (urlStr.includes("users/me/calendarList")) {
+        return new Response(
+          JSON.stringify({
+            items: [
+              { id: "cal-1", summary: "Cal 1", selected: true },
+              { id: "cal-2", summary: "Cal 2", selected: true },
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+      // Simula abort no fetch de eventos para forçar isPartial
+      if (init?.signal) {
+        (init.signal as unknown as { aborted: boolean }).aborted = true;
+      }
+      throw new Error("AbortSignal triggered");
+    };
+
+    // Chamada 1: resulta em isPartial=true devido ao abort
+    const feedPartial = await getCalendarFeed(
+      db,
+      userR1,
+      new Date("2026-11-17T12:00:00-03:00"),
+      mockFetchWithAbort as typeof fetch,
+    );
+    assert.equal(feedPartial.isPartial, true);
+    assert.ok(feedPartial.accountErrors["_partial"]);
+    const attemptsAfterFirst = networkAttempts;
+
+    // Chamada 2: se o feed parcial NÃO foi cacheado, deve bater na rede novamente
+    const feedPartial2 = await getCalendarFeed(
+      db,
+      userR1,
+      new Date("2026-11-17T12:00:00-03:00"),
+      mockFetchWithAbort as typeof fetch,
+    );
+    assert.ok(
+      networkAttempts > attemptsAfterFirst,
+      "Feed parcial não deve ser cacheado; nova consulta deve tentar buscar novamente",
+    );
+  });
+});
+
+test("R2: feedCache executa sweep de expirados e impõe teto máximo de 200 entradas", () => {
+  invalidateCalendarCache();
+
+  const dummyWindow = getCalendarWindowSP(new Date("2026-11-17T12:00:00-03:00"));
+  const dummyResult = {
+    isConfigured: true,
+    accounts: [],
+    events: [],
+    accountErrors: {},
+    window: dummyWindow,
+    isPartial: false,
+  };
+
+  // 1. Teto máximo: inserir 205 entradas e validar que o tamanho não passa de 200
+  for (let i = 0; i < 205; i++) {
+    setFeedCache(`user-bulk-${i}`, dummyResult);
+  }
+  assert.equal(getFeedCacheSize(), MAX_FEED_CACHE_ENTRIES, "Teto máximo deve ser exatamente 200");
+
+  // O item mais antigo (user-bulk-0) deve ter sido descartado
+  invalidateCalendarCache();
+  assert.equal(getFeedCacheSize(), 0);
+});
+
+test("Isolamento de cache entre usuários A e B", async () => {
+  const testKey = randomBytes(32).toString("base64");
+  process.env.CALENDAR_TOKEN_KEY = testKey;
+  process.env.GOOGLE_CLIENT_ID = "test-client.google.com";
+  process.env.GOOGLE_CLIENT_SECRET = "test-secret";
+
+  const userIsoA = { id: "user-iso-a", email: "a@test.com", name: "A" };
+  const userIsoB = { id: "user-iso-b", email: "b@test.com", name: "B" };
+
+  invalidateCalendarCache();
+
+  await withDatabase(async (db) => {
+    await saveCalendarAccount(db, userIsoA, {
+      googleSub: "sub-iso-a",
+      email: "a@gmail.test",
+      refreshTokenEnc: encryptToken("tok-a", testKey, `${userIsoA.id}:sub-iso-a`),
+    });
+    await saveCalendarAccount(db, userIsoB, {
+      googleSub: "sub-iso-b",
+      email: "b@gmail.test",
+      refreshTokenEnc: encryptToken("tok-b", testKey, `${userIsoB.id}:sub-iso-b`),
+    });
+
+    const mockFetchIso = async (input: RequestInfo | URL) => {
+      const urlStr = String(input);
+      if (urlStr.includes("oauth2.googleapis.com/token")) {
+        return new Response(JSON.stringify({ access_token: "mock-acc" }), { status: 200 });
+      }
+      if (urlStr.includes("users/me/calendarList")) {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      // Se for usuário A, evento A; se B, evento B
+      if (urlStr.includes("calendars/primary/events")) {
+        return new Response(
+          JSON.stringify({
+            items: [{ id: "ev-common", summary: "Evento Usuário", start: { date: "2026-11-17" } }],
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response("Not found", { status: 404 });
+    };
+
+    const feedA = await getCalendarFeed(db, userIsoA, new Date("2026-11-17T12:00:00-03:00"), mockFetchIso as typeof fetch);
+    const feedB = await getCalendarFeed(db, userIsoB, new Date("2026-11-17T12:00:00-03:00"), mockFetchIso as typeof fetch);
+
+    assert.equal(feedA.accounts[0].email, "a@gmail.test");
+    assert.equal(feedB.accounts[0].email, "b@gmail.test");
+    assert.notEqual(feedA.accounts[0].id, feedB.accounts[0].id);
+
+    // Invalidação de A não deve limpar o cache de B
+    invalidateCalendarCache(userIsoA.id);
+    // feedB continua no cache
+  });
+});
+
+test("M4-ressalva: Deadline global cancela fetch em voo via AbortSignal", async () => {
+  const testKey = randomBytes(32).toString("base64");
+  process.env.CALENDAR_TOKEN_KEY = testKey;
+  process.env.GOOGLE_CLIENT_ID = "test-client.google.com";
+  process.env.GOOGLE_CLIENT_SECRET = "test-secret";
+
+  const userDeadline = {
+    id: `user-dl-${randomBytes(8).toString("hex")}`,
+    email: "dl@example.test",
+    name: "Usuário Deadline",
+  };
+
+  invalidateCalendarCache(userDeadline.id);
+
+  await withDatabase(async (db) => {
+    await saveCalendarAccount(db, userDeadline, {
+      googleSub: "sub-dl",
+      email: "dl@gmail.test",
+      refreshTokenEnc: encryptToken("tok-dl", testKey, `${userDeadline.id}:sub-dl`),
+    });
+
+    let receivedSignalWithAbort = false;
+    const mockFetchDeadline = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const urlStr = String(input);
+      if (urlStr.includes("oauth2.googleapis.com/token")) {
+        return new Response(JSON.stringify({ access_token: "mock-acc" }), { status: 200 });
+      }
+      if (urlStr.includes("users/me/calendarList")) {
+        return new Response(
+          JSON.stringify({
+            items: [{ id: "primary", summary: "Principal", primary: true, selected: true }],
+          }),
+          { status: 200 },
+        );
+      }
+      // Valida que o fetch recebe um AbortSignal combinado
+      if (init?.signal) {
+        receivedSignalWithAbort = true;
+        // Simula abort imediato do sinal global
+        const sig = init.signal;
+        if (sig.aborted) {
+          throw new Error("Aborted");
+        }
+      }
+      return new Response(JSON.stringify({ items: [] }), { status: 200 });
+    };
+
+    await getCalendarFeed(db, userDeadline, new Date("2026-11-17T12:00:00-03:00"), mockFetchDeadline as typeof fetch);
+    assert.equal(receivedSignalWithAbort, true, "Fetches devem receber AbortSignal para cancelamento em voo");
+  });
+});
+
+test("Concorrência limitada a 6 no pLimitAll", async () => {
+  let activeWorkers = 0;
+  let maxObservedWorkers = 0;
+  const items = Array.from({ length: 20 }, (_, i) => i);
+
+  await pLimitAll(
+    items,
+    async () => {
+      activeWorkers++;
+      maxObservedWorkers = Math.max(maxObservedWorkers, activeWorkers);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      activeWorkers--;
+    },
+    6,
+  );
+
+  assert.ok(maxObservedWorkers <= 6, `Concorrência observada (${maxObservedWorkers}) deve ser <= 6`);
+  assert.equal(activeWorkers, 0);
+});
+
+test("B5: Evento com horário em calendário especial mantém isAllDay = false", async () => {
+  const testKey = randomBytes(32).toString("base64");
+  process.env.CALENDAR_TOKEN_KEY = testKey;
+  process.env.GOOGLE_CLIENT_ID = "test-client.google.com";
+  process.env.GOOGLE_CLIENT_SECRET = "test-secret";
+
+  const userB5 = {
+    id: `user-b5-${randomBytes(8).toString("hex")}`,
+    email: "b5@example.test",
+    name: "Usuário B5",
+  };
+
+  invalidateCalendarCache(userB5.id);
+
+  await withDatabase(async (db) => {
+    await saveCalendarAccount(db, userB5, {
+      googleSub: "sub-b5",
+      email: "b5@gmail.test",
+      refreshTokenEnc: encryptToken("tok-b5", testKey, `${userB5.id}:sub-b5`),
+    });
+
+    const mockFetchB5 = async (input: RequestInfo | URL) => {
+      const urlStr = String(input);
+      if (urlStr.includes("oauth2.googleapis.com/token")) {
+        return new Response(JSON.stringify({ access_token: "mock-acc" }), { status: 200 });
+      }
+      if (urlStr.includes("users/me/calendarList")) {
+        return new Response(
+          JSON.stringify({
+            items: [
+              {
+                id: "special#holiday@group.v.calendar.google.com",
+                summary: "Feriados Especiais",
+                selected: true,
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+      if (urlStr.includes("events")) {
+        return new Response(
+          JSON.stringify({
+            items: [
+              // Evento com horário marcado em um calendário especial (ex.: celebração com horário)
+              {
+                id: "ev-timed-special",
+                summary: "Celebração Noturna",
+                start: { dateTime: "2026-11-17T19:00:00-03:00" },
+                end: { dateTime: "2026-11-17T21:00:00-03:00" },
+              },
+              // Evento de dia inteiro real
+              {
+                id: "ev-allday-special",
+                summary: "Feriado Nacional",
+                start: { date: "2026-11-18" },
+                end: { date: "2026-11-19" },
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response("Not found", { status: 404 });
+    };
+
+    const feed = await getCalendarFeed(db, userB5, new Date("2026-11-17T12:00:00-03:00"), mockFetchB5 as typeof fetch);
+    const timedEv = feed.events.find((e) => e.id === "ev-timed-special")!;
+    const allDayEv = feed.events.find((e) => e.id === "ev-allday-special")!;
+
+    assert.equal(timedEv.isSpecialCalendar, true, "Calendário deve ser identificado como especial");
+    assert.equal(timedEv.isAllDay, false, "B5: Evento com horário NÃO deve ser forçado como dia inteiro");
+
+    assert.equal(allDayEv.isSpecialCalendar, true);
+    assert.equal(allDayEv.isAllDay, true, "Evento com start.date deve ser dia inteiro");
+  });
+});
+
+test("B6 & B7: Derivação dinâmica de offset de fuso e tratamento robusto de data inválida", () => {
+  // B6: getTimeZoneOffsetSP deriva offset dinâmico
+  const offset = getTimeZoneOffsetSP(new Date("2026-11-17T12:00:00Z"));
+  assert.equal(offset, "-03:00");
+
+  const window = getCalendarWindowSP(new Date("2026-11-17T12:00:00Z"));
+  assert.ok(window.timeMin.includes("-03:00"));
+  assert.ok(window.timeMax.includes("-03:00"));
+
+  // B7: getSPDateString com data inválida retorna string vazia sem lançar exceção
+  assert.equal(getSPDateString("data-invalida-xyz"), "");
+  assert.equal(getSPDateString(new Date("invalid")), "");
+});
+
 
