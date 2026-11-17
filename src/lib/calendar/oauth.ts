@@ -16,6 +16,22 @@ export class GoogleOAuthError extends Error {
   }
 }
 
+export class GoogleEmailUnverifiedError extends GoogleOAuthError {
+  constructor(message = "O e-mail da conta Google não está verificado.") {
+    super(message, false);
+    this.name = "GoogleEmailUnverifiedError";
+  }
+}
+
+export class GoogleNoOfflineAccessError extends GoogleOAuthError {
+  constructor(
+    message = "O Google não forneceu permissão de atualização offline. Remova o acesso do app na sua conta Google e conecte novamente.",
+  ) {
+    super(message, false);
+    this.name = "GoogleNoOfflineAccessError";
+  }
+}
+
 /**
  * Compara duas strings em tempo constante para evitar ataques de temporização (timing attacks).
  * Valida previamente a equivalência de tamanho em bytes.
@@ -119,6 +135,7 @@ export async function exchangeCodeForTokens({
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: body.toString(),
+      signal: AbortSignal.timeout(5000),
     });
   } catch {
     console.error("Erro de rede ao comunicar com endpoint de token Google");
@@ -143,9 +160,7 @@ export async function exchangeCodeForTokens({
   }
 
   if (!data.refresh_token) {
-    throw new GoogleOAuthError(
-      "O Google não forneceu permissão de atualização offline. Remova o acesso do app na sua conta Google e conecte novamente.",
-    );
+    throw new GoogleNoOfflineAccessError();
   }
 
   // Obtenção segura e autenticada do perfil via endpoint userinfo do Google com o access_token obtido
@@ -153,6 +168,7 @@ export async function exchangeCodeForTokens({
   try {
     const userinfoRes = await fetchFn("https://openidconnect.googleapis.com/v1/userinfo", {
       headers: { Authorization: `Bearer ${data.access_token}` },
+      signal: AbortSignal.timeout(5000),
     });
 
     if (!userinfoRes.ok) {
@@ -172,7 +188,7 @@ export async function exchangeCodeForTokens({
     }
 
     if (!isEmailVerified) {
-      throw new GoogleOAuthError("O e-mail da conta Google não está verificado.");
+      throw new GoogleEmailUnverifiedError();
     }
 
     profile = {
@@ -222,6 +238,7 @@ export async function refreshGoogleAccessToken({
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: body.toString(),
+      signal: AbortSignal.timeout(5000),
     });
   } catch {
     console.error("Erro de rede ao renovar token Google");

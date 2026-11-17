@@ -13,25 +13,28 @@ export const dynamic = "force-dynamic";
 
 export async function handleConnect(_request: NextRequest, userOverride?: CurrentUser) {
   const config = getCalendarConfig();
-  const baseUrl = config.appUrl || "http://localhost:3000";
+
+  // N3: se appUrl estiver vazio ou recurso indisponível, responder com redirect relativo (sem host)
+  if (!config.isAvailable || !config.appUrl) {
+    return new NextResponse(null, {
+      status: 307,
+      headers: {
+        Location: "/calendario?error=unconfigured",
+        "Referrer-Policy": "no-referrer",
+      },
+    });
+  }
 
   let user = userOverride;
   if (!user) {
     try {
       user = await requireCurrentUser();
     } catch {
-      const loginUrl = new URL("/entrar", baseUrl);
+      const loginUrl = new URL("/entrar", config.appUrl);
       const res = NextResponse.redirect(loginUrl);
       res.headers.set("Referrer-Policy", "no-referrer");
       return res;
     }
-  }
-
-  if (!config.isAvailable) {
-    const redirectUrl = new URL("/calendario?error=unconfigured", baseUrl);
-    const res = NextResponse.redirect(redirectUrl);
-    res.headers.set("Referrer-Policy", "no-referrer");
-    return res;
   }
 
   const state = generateOAuthState();
@@ -49,15 +52,13 @@ export async function handleConnect(_request: NextRequest, userOverride?: Curren
   const response = NextResponse.redirect(authUrl);
   response.headers.set("Referrer-Policy", "no-referrer");
 
-  const isProduction = process.env.NODE_ENV === "production" || Boolean(process.env.VERCEL);
-
-  // Cookie de segurança __Host-gcal_oauth com vínculo de sessão e PKCE (B1, B2)
+  // B1: Cookie __Host-gcal_oauth com secure: true SEMPRE (localhost aceita Secure na RFC 6265bis)
   response.cookies.set(
     "__Host-gcal_oauth",
     JSON.stringify({ state, codeVerifier, userId: user.id }),
     {
       httpOnly: true,
-      secure: isProduction,
+      secure: true,
       sameSite: "lax",
       maxAge: 60 * 15,
       path: "/",

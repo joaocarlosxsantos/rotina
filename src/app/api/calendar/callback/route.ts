@@ -4,8 +4,13 @@ import { requireCurrentUser } from "../../../../auth/server";
 import { getDatabase } from "../../../../db/client";
 import { getCalendarConfig, getRedirectUri } from "../../../../lib/calendar/config";
 import { encryptToken } from "../../../../lib/calendar/crypto";
-import { exchangeCodeForTokens, GoogleOAuthError, timingSafeStringEqual } from "../../../../lib/calendar/oauth";
-import { saveCalendarAccount } from "../../../../lib/calendar/store";
+import {
+  exchangeCodeForTokens,
+  GoogleEmailUnverifiedError,
+  GoogleNoOfflineAccessError,
+  timingSafeStringEqual,
+} from "../../../../lib/calendar/oauth";
+import { CalendarAccountLimitError, saveCalendarAccount } from "../../../../lib/calendar/store";
 
 export const dynamic = "force-dynamic";
 
@@ -17,17 +22,42 @@ export async function handleCallback(
   fetchFn = fetch,
 ) {
   const config = getCalendarConfig();
-  const baseUrl = config.appUrl || "http://localhost:3000";
-  const isProduction = process.env.NODE_ENV === "production" || Boolean(process.env.VERCEL);
+
+  // Helper central para redirecionamento seguro com eliminação do cookie e Referrer-Policy (B1, B4, M2, N3)
+  function makeRedirect(path: string) {
+    const res = config.appUrl
+      ? NextResponse.redirect(new URL(path, config.appUrl))
+      : new NextResponse(null, {
+          status: 307,
+          headers: { Location: path },
+        });
+
+    res.headers.set("Referrer-Policy", "no-referrer");
+    res.cookies.set(OAUTH_COOKIE_NAME, "", {
+      path: "/",
+      maxAge: 0,
+      httpOnly: true,
+      secure: true, // B1: secure: true SEMPRE
+      sameSite: "lax",
+    });
+    return res;
+  }
+
+  function failRedirect(codeKey: string) {
+    return makeRedirect(`/calendario?error=${encodeURIComponent(codeKey)}`);
+  }
+
+  // N3: se appUrl estiver vazio ou recurso indisponível, responder com redirect relativo (sem host)
+  if (!config.isAvailable || !config.appUrl) {
+    return failRedirect("unconfigured");
+  }
 
   let user = userOverride;
   if (!user) {
     try {
       user = await requireCurrentUser();
     } catch {
-      const res = NextResponse.redirect(new URL("/entrar", baseUrl));
-      res.headers.set("Referrer-Policy", "no-referrer");
-      return res;
+      return makeRedirect("/entrar");
     }
   }
 
@@ -37,24 +67,6 @@ export async function handleCallback(
   const googleError = searchParams.get("error");
 
   const oauthCookie = request.cookies.get(OAUTH_COOKIE_NAME)?.value;
-
-  // Helper central para redirecionamento seguro com eliminação do cookie e Referrer-Policy (B1, B4, M2)
-  function makeRedirect(path: string) {
-    const res = NextResponse.redirect(new URL(path, baseUrl));
-    res.headers.set("Referrer-Policy", "no-referrer");
-    res.cookies.set(OAUTH_COOKIE_NAME, "", {
-      path: "/",
-      maxAge: 0,
-      httpOnly: true,
-      secure: isProduction,
-      sameSite: "lax",
-    });
-    return res;
-  }
-
-  function failRedirect(codeKey: string) {
-    return makeRedirect(`/calendario?error=${encodeURIComponent(codeKey)}`);
-  }
 
   if (googleError) {
     return failRedirect("access_denied");
@@ -83,10 +95,6 @@ export async function handleCallback(
 
   if (!cookieData.codeVerifier) {
     return failRedirect("invalid_session");
-  }
-
-  if (!config.isAvailable) {
-    return failRedirect("unconfigured");
   }
 
   const redirectUri = getRedirectUri();
@@ -118,17 +126,20 @@ export async function handleCallback(
 
     return makeRedirect("/calendario?success=connected");
   } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : "";
-
-    if (errorMsg.includes("Limite máximo de 5 contas")) {
+    // Classificação estritamente por classe / código tipado (sem checagem de substring)
+    if (error instanceof CalendarAccountLimitError) {
       return failRedirect("account_limit");
     }
-    if (errorMsg.includes("não está verificado")) {
+    if (error instanceof GoogleEmailUnverifiedError) {
       return failRedirect("email_unverified");
     }
-    if (errorMsg.includes("atualização offline")) {
+    if (error instanceof GoogleNoOfflineAccessError) {
       return failRedirect("no_offline_access");
     }
+
+    // Log seguro: apenas operação e nome da classe do erro (sem mensagem de provedor nem corpo)
+    const errorClassName = error instanceof Error ? error.constructor.name : typeof error;
+    console.error(`Erro ao salvar conta Google: operacao=save_calendar_account, classe=${errorClassName}`);
 
     return failRedirect("auth_failed");
   }

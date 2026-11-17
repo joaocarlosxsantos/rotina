@@ -33,8 +33,8 @@ export function getCalendarConfig(env: Partial<NodeJS.ProcessEnv> = process.env)
   };
 }
 
-export function getRedirectUri(origin?: string, env: Partial<NodeJS.ProcessEnv> = process.env): string {
+export function getRedirectUri(env: Partial<NodeJS.ProcessEnv> = process.env): string {
   const config = getCalendarConfig(env);
-  const base = config.appUrl || origin || "";
+  const base = config.appUrl || "";
   return `${base.replace(/\/+$/, "")}/api/calendar/callback`;
 }
