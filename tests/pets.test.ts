@@ -32,6 +32,7 @@ test("Contact sheet has all 36 vector sprites in two sizes and backgrounds", () 
   for (const theme of ["light", "dark"]) assert.equal((preview.match(new RegExp('class="board ' + theme + '"', "g")) ?? []).length, 12);
   assert.doesNotMatch(preview, /<script|https?:\/\/|pixelated|crispEdges/);
   assert.ok(preview.includes("prefers-reduced-motion: reduce"));
+  assert.ok(preview.includes('id="animate"'));
   for (const kind of PET_KINDS) for (const mood of ["sad", "ok", "happy"]) {
     assert.ok(preview.includes('data-pet-kind="' + kind + '" data-pet-mood="' + mood + '"'));
   }
@@ -67,6 +68,16 @@ test("All 12 kinds have distinct vector illustrations for all 3 moods", () => {
     assert.ok(defaultLabel.includes(PET_CATALOG[kind].name));
   }
   assert.equal(silhouettes.size, 12);
+});
+
+test("Decorative sprites suppress image semantics even with an explicit label", () => {
+  for (const kind of PET_KINDS) for (const mood of ["sad", "ok", "happy"] as const) {
+    const html = renderToStaticMarkup(React.createElement(PetSprite, { kind, mood, decorative: true, label: "Repeated visible text" }));
+    assert.ok(html.includes('aria-hidden="true"'));
+    assert.ok(html.includes('focusable="false"'));
+    assert.ok(html.includes("<path"));
+    assert.doesNotMatch(html, /role=|aria-label=|<title/);
+  }
 });
 
 test("Vector gradient ids do not collide when the same pet repeats", () => {

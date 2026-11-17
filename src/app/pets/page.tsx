@@ -79,17 +79,14 @@ export default async function PetsPage({
                     )}
                   </div>
 
-                  <div
-                    className="pet-preview-stage"
-                    aria-label={`Visualização de ${def.name} nos 3 humores`}
-                  >
+                  <div className="pet-preview-stage">
                     <div className="preview-mood-item preview-triste">
                       <div className="preview-sprite-wrapper mood-triste-anim">
                         <PetSprite
                           kind={kind}
                           mood="sad"
                           size={64}
-                          label={`${def.name} triste`}
+                          decorative
                         />
                       </div>
                       <span className="preview-mood-label">Triste</span>
@@ -101,7 +98,7 @@ export default async function PetsPage({
                           kind={kind}
                           mood="ok"
                           size={64}
-                          label={`${def.name} de boa`}
+                          decorative
                         />
                       </div>
                       <span className="preview-mood-label">De boa</span>
@@ -113,7 +110,7 @@ export default async function PetsPage({
                           kind={kind}
                           mood="happy"
                           size={64}
-                          label={`${def.name} feliz`}
+                          decorative
                         />
                       </div>
                       <span className="preview-mood-label">Feliz</span>

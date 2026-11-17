@@ -1,7 +1,7 @@
-﻿import { useId } from "react";
+import { useId } from "react";
 import { PET_CATALOG, parsePetKind, type PetKind } from "../lib/pets";
 
-export type PetSpriteProps = { size?: number; className?: string; label?: string };
+export type PetSpriteProps = { size?: number; className?: string; label?: string; decorative?: boolean };
 export type Mood = "sad" | "ok" | "happy";
 
 export function normalizeSize(size?: number): number {
@@ -51,7 +51,7 @@ function Face({ kind, mood, ink }: { kind: PetKind; mood: Mood; ink: string }) {
   </g>;
 }
 
-export function PetSprite({ kind = "original", mood, size, className, label }: PetSpriteProps & { kind?: PetKind; mood: Mood }) {
+export function PetSprite({ kind = "original", mood, size, className, label, decorative = false }: PetSpriteProps & { kind?: PetKind; mood: Mood }) {
   const id = useId();
   const safeKind = parsePetKind(kind);
   const coat = SPRITES[safeKind];
@@ -60,8 +60,8 @@ export function PetSprite({ kind = "original", mood, size, className, label }: P
   const fur = `url(#${id}-fur)`;
   const bird = ["pinguim", "pintinho", "coruja"].includes(safeKind);
   return <svg className={className} width={normalizeSize(size)} height={normalizeSize(size)} viewBox="0 0 200 200"
-    role="img" aria-label={name} focusable="false" data-pet-kind={safeKind} data-pet-mood={expression}>
-    <title>{name}</title>
+    role={decorative ? undefined : "img"} aria-label={decorative ? undefined : name} aria-hidden={decorative ? true : undefined} focusable="false" data-pet-kind={safeKind} data-pet-mood={expression}>
+    {!decorative && <title>{name}</title>}
     <defs>
       <linearGradient id={`${id}-fur`} x1="0" y1="0" x2=".7" y2="1" gradientUnits="objectBoundingBox">
         <stop stopColor={coat.light} /><stop offset="1" stopColor={coat.base} />

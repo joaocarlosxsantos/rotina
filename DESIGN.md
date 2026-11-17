@@ -258,7 +258,7 @@ O catálogo tem 12 pets e 36 variantes: Ursinho (original), gato, cachorro, coel
 
 Os SVGs usam curvas, gradientes leves e sombra suave, sem grades ou retângulos de pixels. Cabeças grandes, olhos com dois brilhos, bochechas rosadas e traços por espécie definem o estilo fofo. Triste tem sobrancelhas inclinadas, boca caída, lágrima e postura baixa; feliz tem sorriso aberto, sobrancelhas erguidas, coração e postura alta; ok sorri discretamente.
 
-O viewBox é 200 × 200, o tamanho padrão é 180px e a renderização é suave. Cada instância gera IDs de gradiente exclusivos com useId. Todos os sprites têm role=img, aria-label e title, inclusive quando label não é informado. O humor continua escrito: Feliz, De boa ou Triste.
+O viewBox é 200 × 200, o tamanho padrão é 180px e a renderização é suave. Cada instância gera IDs de gradiente exclusivos com useId. Por padrão os sprites têm role=img, aria-label e title, inclusive quando label não é informado. Com decorative, ficam ocultos da árvore de acessibilidade (aria-hidden), sem role, aria-label ou title. Os cards de /pets usam essa opção porque o nome e os humores já estão escritos na tela. O humor continua escrito: Feliz, De boa ou Triste.
 
 O bloco `PET_MOTION_START`/`PET_MOTION_END` de `src/app/globals.css` anima o grupo do corpo: feliz sobe 3px em 2,4s por dois ciclos; ok sobe 2px em 2,4s por dois ciclos; triste desce 2px e escala a 0,98 em 4,8s por um ciclo. A piscada dura 4,8s por um ciclo; todos usam `ease-in-out`. A saudação do app termina em 4,8s. Com `prefers-reduced-motion: reduce`, animação e transformação são desativadas.
 
@@ -288,6 +288,6 @@ Sucesso usa superfície suave e `role="status"`; erro usa tons próprios e `role
 
 ### Don't:
 - **Don't** apresentar esta direção provisória como identidade de marca aprovada.
-- **Don't** prolongar a saudação dos pets além de 4,8s no app ou ignorar movimento reduzido; não acrescentar sombras ou gradientes ao reproduzir esta direção.
+- **Don't** prolongar a saudação dos pets além de 4,8s no app ou ignorar movimento reduzido; sombras e gradientes suaves são permitidos nos mascotes vetoriais.
 - **Don't** aplicar pixelated/crispEdges aos mascotes vetoriais ou transformar o selo de humor em controle.
 - **Don't** substituir rótulos de campos por placeholders ou depender somente de cor para estados.
