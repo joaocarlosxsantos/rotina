@@ -54,7 +54,7 @@ export function Logo({
       <text
         x="42"
         y="24"
-        fill={OUTLINE}
+        fill="var(--ink, #203e32)"
         fontFamily="var(--font-display, Georgia, serif)"
         fontSize="19"
         fontWeight="600"
@@ -70,8 +70,8 @@ export function Logo({
         width="46"
         height="20"
         rx="5"
-        fill={PALE}
-        stroke={BORDER}
+        fill="var(--pale, #e8eddf)"
+        stroke="var(--line, #c5cbbf)"
         strokeWidth="1"
       />
 
@@ -79,7 +79,7 @@ export function Logo({
       <text
         x="127"
         y="22"
-        fill={PRIMARY}
+        fill="var(--primary, #315e43)"
         fontFamily="var(--font-sans, system-ui, sans-serif)"
         fontSize="12"
         fontWeight="700"

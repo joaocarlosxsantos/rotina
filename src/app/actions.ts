@@ -30,9 +30,9 @@ async function mutate<T>(
     error =
       cause instanceof InputError
         ? cause.message
-        : "Não foi possível salvar. Confira o banco local e tente novamente.";
+        : "Não foi possível salvar. Tente novamente mais tarde.";
     if (!(cause instanceof InputError))
-      console.error("Falha ao salvar no banco.");
+      console.error("Falha ao processar a ação.");
   }
   if (error) redirect(`${destination}?error=${encodeURIComponent(error)}`);
   revalidatePath("/");

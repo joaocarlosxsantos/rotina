@@ -18,6 +18,7 @@ import { Submit } from "./submit";
 import { Pet } from "./pet";
 import Link from "next/link";
 import { RoutineFields, ActivityFields } from "./routine-fields";
+import { Logo } from "./brand";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -49,10 +50,9 @@ export default async function Home({
         Pular para minhas rotinas
       </a>
       <header className="topbar">
-        <a href="/" className="brand">
-          rotina<span>pet</span>
-          <span className="brand-dot" aria-hidden="true" />
-        </a>
+        <Link href="/" className="brand" aria-label="Rotina Pet">
+          <Logo size={32} mood={data.mood} />
+        </Link>
         <nav aria-label="Principal">
           <Link href="/" aria-current="page">
             Hoje

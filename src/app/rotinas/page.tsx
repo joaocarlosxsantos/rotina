@@ -13,6 +13,7 @@ import {
 import { RoutineFields, ActivityFields } from "../routine-fields";
 import { ArchiveForm } from "../archive-form";
 import { Submit } from "../submit";
+import { Logo } from "../brand";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -33,9 +34,8 @@ export default async function Manage({
         Pular para gerenciar rotinas
       </a>
       <header className="topbar">
-        <Link className="brand" href="/">
-          rotina<span>pet</span>
-          <span className="brand-dot" aria-hidden="true" />
+        <Link className="brand" href="/" aria-label="Rotina Pet">
+          <Logo size={32} />
         </Link>
         <nav aria-label="Principal">
           <Link href="/">Hoje</Link>

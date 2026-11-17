@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { AuthForm } from "./auth-form";
+import { Logo } from "./brand";
 export function AuthPage({ signup = false, notice = false }: { signup?: boolean; notice?: boolean }) {
   return <>
     <a className="skip" href="#acesso">Pular para o formulário</a>
-    <header className="topbar auth-topbar"><Link href="/entrar" className="brand">rotina<span>pet</span><span className="brand-dot" aria-hidden="true" /></Link></header>
+    <header className="topbar auth-topbar"><Link href="/entrar" className="brand" aria-label="Rotina Pet"><Logo size={32} /></Link></header>
     <main className="auth-page" id="acesso">
       <h1>{signup ? "Seu primeiro passo." : "Bom ter você aqui."}</h1>
       <p>{signup ? "Crie sua conta para cuidar da sua rotina e do seu companheiro." : "Entre para continuar sua rotina, no seu ritmo."}</p>

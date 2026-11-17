@@ -1,11 +1,13 @@
 import React from 'react';
 
+export type Mood = 'happy' | 'ok' | 'sad' | 'feliz' | 'triste';
+
 export type LogoMarkProps = {
   size?: number;
   className?: string;
   style?: React.CSSProperties;
   title?: string;
-  mood?: 'happy' | 'ok' | 'sad';
+  mood?: Mood;
 };
 
 const OUTLINE = '#203e32';
@@ -32,23 +34,31 @@ const BODY_ROWS: readonly string[] = [
   '..kkkk....kkkk..',
 ];
 
-const FACES = {
-  happy: {
-    eyes: [[3, 7], [4, 6], [5, 7], [10, 7], [11, 6], [12, 7]],
-    mouth: [[6, 9], [7, 10], [8, 10], [9, 9]],
-    cheeks: [[2, 9], [3, 9], [12, 9], [13, 9]],
-  },
-  ok: {
-    eyes: [[4, 7], [5, 7], [10, 7], [11, 7]],
-    mouth: [[6, 10], [7, 10], [8, 10], [9, 10]],
-    cheeks: [],
-  },
-  sad: {
-    eyes: [[4, 6], [5, 7], [10, 7], [11, 6]],
-    mouth: [[6, 11], [7, 10], [8, 10], [9, 11]],
-    cheeks: [],
-  },
+const HAPPY_FACE = {
+  eyes: [[3, 7], [4, 6], [5, 7], [10, 7], [11, 6], [12, 7]],
+  mouth: [[6, 9], [7, 10], [8, 10], [9, 9]],
+  cheeks: [[2, 9], [3, 9], [12, 9], [13, 9]],
 } as const;
+
+const OK_FACE = {
+  eyes: [[4, 7], [5, 7], [10, 7], [11, 7]],
+  mouth: [[6, 10], [7, 10], [8, 10], [9, 10]],
+  cheeks: [],
+} as const;
+
+const SAD_FACE = {
+  eyes: [[4, 6], [5, 7], [10, 7], [11, 6]],
+  mouth: [[6, 11], [7, 10], [8, 10], [9, 11]],
+  cheeks: [],
+} as const;
+
+const FACES: Record<Mood, typeof HAPPY_FACE | typeof OK_FACE | typeof SAD_FACE> = {
+  happy: HAPPY_FACE,
+  feliz: HAPPY_FACE,
+  ok: OK_FACE,
+  sad: SAD_FACE,
+  triste: SAD_FACE,
+};
 
 export function LogoMark({
   size = 32,
