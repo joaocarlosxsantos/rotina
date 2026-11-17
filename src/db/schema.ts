@@ -1,49 +1,68 @@
+import { sql } from "drizzle-orm";
 import {
+  check,
+  date,
   integer,
-  sqliteTable,
+  pgEnum,
+  pgTable,
   text,
+  timestamp,
   uniqueIndex,
-} from "drizzle-orm/sqlite-core";
+  uuid,
+} from "drizzle-orm/pg-core";
 
-export const routines = sqliteTable("routines", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  // 127 = ALL_WEEKDAYS (rules.ts): todos os dias da semana.
-  weekdays: integer("weekdays").notNull().default(127),
-  archivedAt: integer("archived_at"),
-  createdAt: integer("created_at").notNull(),
-});
+export const outcome = pgEnum("activity_outcome", ["completed", "skipped"]);
+export const routines = pgTable(
+  "routines",
+  {
+    id: uuid("id").primaryKey(),
+    name: text("name").notNull(),
+    weekdays: integer("weekdays").notNull().default(127),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    check("routine_weekdays_valid", sql`${table.weekdays} between 1 and 127`),
+  ],
+);
 
-export const activities = sqliteTable("activities", {
-  id: text("id").primaryKey(),
-  routineId: text("routine_id")
+export const activities = pgTable("activities", {
+  id: uuid("id").primaryKey(),
+  routineId: uuid("routine_id")
     .notNull()
     .references(() => routines.id),
   name: text("name").notNull(),
   scheduledTime: text("scheduled_time"),
-  archivedAt: integer("archived_at"),
-  createdAt: integer("created_at").notNull(),
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
 });
 
-export const completions = sqliteTable(
+export const completions = pgTable(
   "completions",
   {
-    id: text("id").primaryKey(),
-    activityId: text("activity_id")
+    id: uuid("id").primaryKey(),
+    activityId: uuid("activity_id")
       .notNull()
       .references(() => activities.id),
-    day: text("day").notNull(),
-    points: integer("points").notNull().default(10),
-    // Uma linha resolve o dia: concluir ou pular compartilham o mesmo índice único.
-    status: text("status", { enum: ["completed", "skipped"] })
-      .notNull()
-      .default("completed"),
+    day: date("day", { mode: "string" }).notNull(),
+    points: integer("points").notNull(),
+    status: outcome("status").notNull(),
     bonus: integer("bonus").notNull().default(0),
-    eventOrder: integer("event_order").notNull().default(0),
-    balanceAfter: integer("balance_after").notNull().default(0),
+    eventOrder: integer("event_order").notNull(),
+    balanceAfter: integer("balance_after").notNull(),
   },
   (table) => [
     uniqueIndex("completion_activity_day").on(table.activityId, table.day),
     uniqueIndex("completion_event_order").on(table.eventOrder),
+    check("completion_balance_nonnegative", sql`${table.balanceAfter} >= 0`),
+    check("completion_bonus_valid", sql`${table.bonus} between 0 and 5`),
+    check(
+      "completion_points_valid",
+      sql`(${table.status} = 'completed' and ${table.points} = 10) or (${table.status} = 'skipped' and ${table.points} = -5 and ${table.bonus} = 0)`,
+    ),
   ],
 );

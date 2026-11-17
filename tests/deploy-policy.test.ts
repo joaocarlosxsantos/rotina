@@ -1,296 +1,193 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { spawnSync } from "node:child_process";
-import { createClient } from "@libsql/client";
 import {
+  databaseConfiguration,
   configuredDatabase,
   createDatabase,
-  databaseConfiguration,
-  databaseCredentials,
 } from "../src/db/client";
 import { migrationPlan } from "../src/db/migration-policy";
 
-const remote = {
-  DATABASE_URL: "libsql://policy-fixture.invalid",
-  DATABASE_AUTH_TOKEN: "test-only-placeholder",
-};
+const pooled =
+  "postgresql://test-user:test-only-secret@ep-fixture-pooler.neon.tech/app?sslmode=require";
+const direct =
+  "postgres://test-user:other-test-secret@ep-fixture.neon.tech/app?sslmode=require";
 
-const turso = {
-  TURSO_DATABASE_URL: "libsql://turso-policy-fixture.invalid",
-  TURSO_AUTH_TOKEN: "turso-test-only-placeholder",
-};
-
-test("factory de baixo nível também bloqueia remoto em dev/teste antes de criar conexão", () => {
-  let calls = 0;
-  const forbiddenFactory: typeof createClient = () => {
-    calls += 1;
-    throw new Error("não deveria criar conexão");
-  };
-  for (const NODE_ENV of ["development", "test"]) {
-    assert.throws(
-      () =>
-        createDatabase(
-          remote.DATABASE_URL,
-          remote.DATABASE_AUTH_TOKEN,
-          forbiddenFactory,
-          { NODE_ENV },
-        ),
-      /apenas SQLite local/,
-    );
-    assert.throws(
-      () =>
-        createDatabase(
-          "https://blocked.invalid",
-          remote.DATABASE_AUTH_TOKEN,
-          forbiddenFactory,
-          { NODE_ENV },
-        ),
-      /apenas SQLite local/,
-    );
-  }
-  assert.equal(calls, 0);
-});
-
-test("dev/teste mantêm SQLite local e recusam libsql mesmo com token ou flag de migration", () => {
-  for (const NODE_ENV of [undefined, "development", "test"]) {
-    assert.deepEqual(databaseConfiguration({ NODE_ENV }), {
-      kind: "local",
-      url: "file:./data/rotina.db",
-    });
-    assert.throws(
-      () =>
-        databaseConfiguration({
-          ...remote,
-          NODE_ENV,
-          ALLOW_REMOTE_MIGRATE: "1",
-        }),
-      /apenas SQLite local/,
-    );
-  }
-  assert.throws(
-    () => databaseConfiguration({ DATABASE_URL: "file:../escape.db" }),
-    /nao e permitido/,
+test("produção aceita DATABASE_URL ou POSTGRES_URL do Neon, com prioridade explícita", () => {
+  assert.deepEqual(
+    databaseConfiguration({ NODE_ENV: "production", DATABASE_URL: pooled }),
+    { kind: "neon", url: pooled },
   );
-  assert.throws(
-    () => databaseConfiguration({ DATABASE_URL: "file::memory:" }),
-    /memoria/,
+  assert.deepEqual(
+    databaseConfiguration({ VERCEL: "1", POSTGRES_URL: pooled }),
+    { kind: "neon", url: pooled },
+  );
+  assert.equal(
+    databaseConfiguration({
+      NODE_ENV: "production",
+      DATABASE_URL: direct,
+      POSTGRES_URL: pooled,
+    }).kind,
+    "neon",
+  );
+  assert.deepEqual(
+    databaseConfiguration({
+      NODE_ENV: "production",
+      DATABASE_URL: "",
+      POSTGRES_URL: pooled,
+    }),
+    { kind: "neon", url: pooled },
   );
 });
 
-test("libsql com token é permitido somente por VERCEL definido ou NODE_ENV=production", () => {
-  for (const env of [
-    { VERCEL: "1", NODE_ENV: "test" },
-    { VERCEL: "", NODE_ENV: "development" },
-    { NODE_ENV: "production" },
-  ]) {
-    assert.deepEqual(databaseConfiguration({ ...remote, ...env }), {
-      kind: "remote",
-      url: remote.DATABASE_URL,
-      authToken: remote.DATABASE_AUTH_TOKEN,
-    });
-  }
-  for (const DATABASE_AUTH_TOKEN of [undefined, "", "   "]) {
-    assert.throws(
-      () =>
-        databaseConfiguration({
-          ...remote,
-          NODE_ENV: "production",
-          DATABASE_AUTH_TOKEN,
-        }),
-      /DATABASE_AUTH_TOKEN/,
-    );
-  }
-  assert.throws(() => databaseConfiguration({ VERCEL: "1" }), /Na Vercel/);
-  assert.throws(
-    () =>
-      databaseConfiguration({
-        VERCEL: "1",
-        DATABASE_URL: "file:./data/rotina.db",
-      }),
-    /Na Vercel/,
-  );
-});
-
-test("configuração remota rejeita URL ambígua ou credenciais na URL sem expor conexão", () => {
+test("URL remota inválida, sem credenciais ou TLS desativado falha sem mostrar segredo", () => {
   for (const DATABASE_URL of [
-    "libsql://",
-    "libsql://user:password@host.invalid",
-    "libsql://host.invalid/path",
-    "libsql://host.invalid?token=hidden",
-    "libsql://host.invalid#hidden",
-    "libsql://host\n.invalid",
-    "https://host.invalid",
+    "https://user:secret@host.invalid",
+    "postgres://fixture.neon.tech/app",
+    "postgres://u:p@fixture.neon.tech",
+    "postgres://u:p@other.invalid/app",
+    `${pooled}#hidden`,
+    "postgres://u:p@fixture.neon.tech/app?sslmode=disable",
+    "postgres://u:p@fixture\n.neon.tech/app",
+    "postgres://u:p@fixture.neon.tech/app?host=outside.invalid",
   ]) {
     assert.throws(
-      () =>
-        databaseConfiguration({
-          ...remote,
-          NODE_ENV: "production",
-          DATABASE_URL,
-        }),
+      () => databaseConfiguration({ NODE_ENV: "production", DATABASE_URL }),
       (error: unknown) => {
         assert.ok(error instanceof Error);
         assert.ok(!error.message.includes(DATABASE_URL));
-        assert.ok(!error.message.includes(remote.DATABASE_AUTH_TOKEN));
+        assert.ok(!error.message.includes("test-only-secret"));
         return true;
       },
     );
   }
 });
 
-test("factory recebe URL e authToken remoto, sem conexão de rede e sem alterar variável global", () => {
-  const memory = createClient({ url: "file::memory:" });
+test("factory remota recebe a URL selecionada sem abrir rede e redige erros", async () => {
+  const memory = await createDatabase();
   let calls = 0;
   try {
-    const env = Object.freeze({ ...remote, NODE_ENV: "production" });
-    const connection = configuredDatabase(env, process.cwd(), (config) => {
-      calls += 1;
-      assert.equal(config.url, remote.DATABASE_URL);
-      assert.equal(config.authToken, remote.DATABASE_AUTH_TOKEN);
-      return memory;
-    });
-    assert.equal(connection.client, memory);
-    assert.equal(calls, 1);
-    assert.equal(env.NODE_ENV, "production");
-    assert.throws(
-      () =>
-        configuredDatabase(
-          { ...remote, NODE_ENV: "test" },
-          process.cwd(),
-          () => {
-            calls += 1;
-            return memory;
-          },
-        ),
-      /apenas SQLite local/,
-    );
-    assert.equal(calls, 1, "a guarda é avaliada antes de chamar o driver");
-    assert.throws(
-      () =>
-        configuredDatabase(env, process.cwd(), () => {
-          throw new Error(
-            `${remote.DATABASE_URL} ${remote.DATABASE_AUTH_TOKEN}`,
-          );
-        }),
-      (error: unknown) => {
-        assert.ok(error instanceof Error);
-        assert.ok(!error.message.includes(remote.DATABASE_URL));
-        assert.ok(!error.message.includes(remote.DATABASE_AUTH_TOKEN));
-        return true;
-      },
-    );
-  } finally {
-    memory.close();
-  }
-});
-
-test("factory local não recebe token remoto residual", () => {
-  const memory = createClient({ url: "file::memory:" });
-  try {
-    configuredDatabase(
-      { NODE_ENV: "test", DATABASE_AUTH_TOKEN: remote.DATABASE_AUTH_TOKEN },
+    const connection = await configuredDatabase(
+      { VERCEL: "1", POSTGRES_URL: pooled },
       process.cwd(),
-      (config) => {
-        assert.equal(config.url, "file:./data/rotina.db");
-        assert.equal(config.authToken, undefined);
+      async (url) => {
+        calls++;
+        assert.equal(url, pooled);
         return memory;
       },
     );
-  } finally {
-    memory.close();
-  }
-});
-
-test("migration remota exige produção Vercel ou override explícito; flag não libera runtime dev", () => {
-  assert.equal(
-    migrationPlan({ ...remote, VERCEL_ENV: "production" }).kind,
-    "remote",
-  );
-  assert.equal(
-    migrationPlan({
-      ...remote,
-      NODE_ENV: "development",
-      ALLOW_REMOTE_MIGRATE: "1",
-    }).kind,
-    "remote",
-  );
-  assert.throws(
-    () =>
-      databaseConfiguration({
-        ...remote,
-        NODE_ENV: "development",
-        ALLOW_REMOTE_MIGRATE: "1",
-      }),
-    /apenas SQLite local/,
-  );
-  for (const ALLOW_REMOTE_MIGRATE of [undefined, "", "true", "0"]) {
-    assert.throws(
+    assert.equal(connection, memory);
+    assert.equal(calls, 1);
+    await assert.rejects(
       () =>
-        migrationPlan({
-          ...remote,
-          NODE_ENV: "production",
-          ALLOW_REMOTE_MIGRATE,
-        }),
-      /Migration remota bloqueada/,
+        configuredDatabase(
+          { NODE_ENV: "test", DATABASE_URL: pooled },
+          process.cwd(),
+          async () => {
+            calls++;
+            return memory;
+          },
+        ),
+      /somente PGlite/,
     );
+    assert.equal(calls, 1);
+    await assert.rejects(
+      () =>
+        configuredDatabase(
+          { NODE_ENV: "production", DATABASE_URL: pooled },
+          process.cwd(),
+          async () => {
+            throw new Error(pooled);
+          },
+        ),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.ok(!error.message.includes(pooled));
+        assert.ok(!error.message.includes("test-only-secret"));
+        return true;
+      },
+    );
+  } finally {
+    await memory.close();
   }
-  assert.throws(
-    () =>
-      migrationPlan({
-        DATABASE_URL: remote.DATABASE_URL,
-        VERCEL_ENV: "production",
-      }),
-    /DATABASE_AUTH_TOKEN/,
-  );
-  assert.throws(
-    () =>
-      migrationPlan({
-        VERCEL_ENV: "production",
-        DATABASE_URL: "file:./data/rotina.db",
-      }),
-    /Deploy de produção/,
-  );
-  assert.throws(
-    () =>
-      migrationPlan({
-        NODE_ENV: "production",
-        DATABASE_URL: "file:./data/rotina.db",
-      }),
-    /Migration de producao bloqueada/,
-  );
-  assert.equal(migrationPlan({ NODE_ENV: "test" }).kind, "local");
 });
 
-test("Preview nunca migra, mesmo com override, token ou configuração inválida", () => {
-  for (const extra of [
-    {},
-    { ...remote, ALLOW_REMOTE_MIGRATE: "1", NODE_ENV: "production" },
-    { DATABASE_URL: "file:../escape.db" },
-  ]) {
-    assert.deepEqual(migrationPlan({ ...extra, VERCEL_ENV: "preview" }), {
-      kind: "skip",
-    });
-  }
-  for (const VERCEL_ENV of [undefined, "development", "preview"]) {
+test("Preview nunca migra e vercel-build só migra no ambiente Production", () => {
+  for (const override of [undefined, "1"]) {
     assert.deepEqual(
       migrationPlan({
-        ...remote,
-        ALLOW_REMOTE_MIGRATE: "1",
-        npm_lifecycle_event: "vercel-build",
-        VERCEL_ENV,
+        VERCEL: "1",
+        VERCEL_ENV: "preview",
+        DATABASE_URL: pooled,
+        DATABASE_URL_UNPOOLED: direct,
+        ALLOW_REMOTE_MIGRATE: override,
       }),
       { kind: "skip" },
     );
   }
+  for (const VERCEL_ENV of [undefined, "development", "preview"])
+    assert.deepEqual(
+      migrationPlan({ npm_lifecycle_event: "vercel-build", VERCEL_ENV }),
+      { kind: "skip" },
+    );
+  assert.throws(
+    () => migrationPlan({ VERCEL: "1", VERCEL_ENV: "production" }),
+    /Produção exige/,
+  );
 });
 
-test("CLI de Preview encerra antes de abrir banco; CLI remota não autorizada falha sem vazar dados", () => {
-  const baseEnv: NodeJS.ProcessEnv = {
+test("migration de deploy usa unpooled quando disponível; ambiente local exige autorização", () => {
+  assert.deepEqual(
+    migrationPlan({
+      VERCEL: "1",
+      VERCEL_ENV: "production",
+      DATABASE_URL: pooled,
+      DATABASE_URL_UNPOOLED: direct,
+    }),
+    { kind: "neon", url: direct },
+  );
+  assert.deepEqual(
+    migrationPlan({
+      VERCEL: "1",
+      VERCEL_ENV: "production",
+      POSTGRES_URL: pooled,
+    }),
+    { kind: "neon", url: pooled },
+  );
+  assert.throws(
+    () => migrationPlan({ NODE_ENV: "production", DATABASE_URL: pooled }),
+    /ALLOW_REMOTE_MIGRATE/,
+  );
+  assert.throws(
+    () => migrationPlan({ VERCEL_ENV: "production", DATABASE_URL: pooled }),
+    /ALLOW_REMOTE_MIGRATE/,
+  );
+  assert.deepEqual(
+    migrationPlan({
+      DATABASE_URL: pooled,
+      DATABASE_URL_UNPOOLED: direct,
+      ALLOW_REMOTE_MIGRATE: "1",
+    }),
+    { kind: "neon", url: direct },
+  );
+  assert.deepEqual(
+    migrationPlan({ DATABASE_URL_UNPOOLED: direct, ALLOW_REMOTE_MIGRATE: "1" }),
+    { kind: "neon", url: direct },
+  );
+  assert.equal(
+    migrationPlan({ NODE_ENV: "test", DATABASE_URL: "memory://" }).kind,
+    "pglite",
+  );
+});
+
+test("CLI Preview e CLI bloqueada encerram sem rede nem vazamento de senha/URL", () => {
+  const env: NodeJS.ProcessEnv = {
     ...process.env,
-    DATABASE_URL: remote.DATABASE_URL,
-    DATABASE_AUTH_TOKEN: remote.DATABASE_AUTH_TOKEN,
     NODE_ENV: "production",
-    VERCEL: "1",
+    DATABASE_URL: pooled,
+    DATABASE_URL_UNPOOLED: direct,
+    POSTGRES_URL: "",
+    VERCEL: "",
     npm_lifecycle_event: "db:migrate",
     ALLOW_REMOTE_MIGRATE: "",
   };
@@ -299,7 +196,7 @@ test("CLI de Preview encerra antes de abrir banco; CLI remota não autorizada fa
     ["--import", "tsx", "scripts/migrate.ts"],
     {
       encoding: "utf8",
-      env: { ...baseEnv, VERCEL_ENV: "preview", ALLOW_REMOTE_MIGRATE: "1" },
+      env: { ...env, VERCEL_ENV: "preview", ALLOW_REMOTE_MIGRATE: "1" },
       timeout: 10_000,
     },
   );
@@ -310,201 +207,17 @@ test("CLI de Preview encerra antes de abrir banco; CLI remota não autorizada fa
     ["--import", "tsx", "scripts/migrate.ts"],
     {
       encoding: "utf8",
-      env: { ...baseEnv, VERCEL_ENV: "development" },
+      env: { ...env, VERCEL: undefined, VERCEL_ENV: undefined },
       timeout: 10_000,
     },
   );
   assert.notEqual(blocked.status, 0);
-  assert.match(blocked.stderr, /Migration remota bloqueada/);
-  for (const result of [preview, blocked]) {
-    assert.ok(
-      !`${result.stdout}${result.stderr}`.includes(remote.DATABASE_URL),
-    );
-    assert.ok(
-      !`${result.stdout}${result.stderr}`.includes(remote.DATABASE_AUTH_TOKEN),
-    );
-  }
-});
-
-test("credenciais resolvem DATABASE_* primeiro e aceitam apenas TURSO_*", () => {
-  assert.deepEqual(databaseCredentials({}), { url: "" });
-  assert.deepEqual(databaseCredentials({ ...remote }), {
-    url: remote.DATABASE_URL,
-    authToken: remote.DATABASE_AUTH_TOKEN,
-  });
-  assert.deepEqual(databaseCredentials({ ...turso }), {
-    url: turso.TURSO_DATABASE_URL,
-    authToken: turso.TURSO_AUTH_TOKEN,
-  });
-  assert.deepEqual(databaseCredentials({ ...turso, ...remote }), {
-    url: remote.DATABASE_URL,
-    authToken: remote.DATABASE_AUTH_TOKEN,
-  });
-  assert.deepEqual(
-    databaseCredentials({
-      DATABASE_URL: remote.DATABASE_URL,
-      TURSO_AUTH_TOKEN: turso.TURSO_AUTH_TOKEN,
-    }),
-    {
-      url: remote.DATABASE_URL,
-      authToken: turso.TURSO_AUTH_TOKEN,
-    },
-  );
-  assert.deepEqual(
-    databaseCredentials({
-      TURSO_DATABASE_URL: turso.TURSO_DATABASE_URL,
-      DATABASE_AUTH_TOKEN: remote.DATABASE_AUTH_TOKEN,
-    }),
-    {
-      url: turso.TURSO_DATABASE_URL,
-      authToken: remote.DATABASE_AUTH_TOKEN,
-    },
-  );
-  assert.deepEqual(
-    databaseCredentials({ DATABASE_URL: "   ", ...turso }),
-    {
-      url: turso.TURSO_DATABASE_URL,
-      authToken: turso.TURSO_AUTH_TOKEN,
-    },
-  );
-});
-
-test("apenas TURSO_* funciona em runtime e na migration de produção", () => {
-  const expected = {
-    kind: "remote",
-    url: turso.TURSO_DATABASE_URL,
-    authToken: turso.TURSO_AUTH_TOKEN,
-  } as const;
-
-  assert.deepEqual(
-    databaseConfiguration({ ...turso, NODE_ENV: "production" }),
-    expected,
-  );
-  assert.deepEqual(
-    databaseConfiguration({ ...turso, VERCEL: "1", NODE_ENV: "test" }),
-    expected,
-  );
-  assert.deepEqual(
-    migrationPlan({ ...turso, VERCEL_ENV: "production" }),
-    expected,
-  );
-});
-
-test("quando os dois pares existem DATABASE_* vence em runtime e migration", () => {
-  const both = { ...turso, ...remote, NODE_ENV: "production" };
-  const expected = {
-    kind: "remote",
-    url: remote.DATABASE_URL,
-    authToken: remote.DATABASE_AUTH_TOKEN,
-  } as const;
-
-  assert.deepEqual(databaseConfiguration(both), expected);
-  assert.deepEqual(
-    migrationPlan({ ...both, VERCEL_ENV: "production" }),
-    expected,
-  );
-});
-
-test("token ausente em qualquer par falha sem revelar a URL", () => {
-  for (const env of [
-    { TURSO_DATABASE_URL: turso.TURSO_DATABASE_URL, NODE_ENV: "production" },
-    { DATABASE_URL: remote.DATABASE_URL, NODE_ENV: "production" },
-  ]) {
-    assert.throws(
-      () => databaseConfiguration(env),
-      (error: unknown) => {
-        assert.ok(error instanceof Error);
-        assert.match(error.message, /AUTH_TOKEN/);
-        assert.ok(!error.message.includes("invalid"));
-        return true;
-      },
-    );
-  }
-  assert.throws(
-    () =>
-      migrationPlan({
-        TURSO_DATABASE_URL: turso.TURSO_DATABASE_URL,
-        VERCEL_ENV: "production",
-      }),
-    /AUTH_TOKEN/,
-  );
-});
-
-test("factory remota com apenas TURSO_* não vaza credenciais em erro", () => {
-  assert.throws(
-    () =>
-      configuredDatabase(
-        { ...turso, NODE_ENV: "production" },
-        process.cwd(),
-        () => {
-          throw new Error(
-            `${turso.TURSO_DATABASE_URL} ${turso.TURSO_AUTH_TOKEN}`,
-          );
-        },
-      ),
-    (error: unknown) => {
-      assert.ok(error instanceof Error);
-      assert.ok(!error.message.includes(turso.TURSO_DATABASE_URL));
-      assert.ok(!error.message.includes(turso.TURSO_AUTH_TOKEN));
-      return true;
-    },
-  );
-});
-
-test("preview nunca migra com apenas TURSO_*", () => {
-  assert.deepEqual(
-    migrationPlan({
-      ...turso,
-      VERCEL_ENV: "preview",
-      ALLOW_REMOTE_MIGRATE: "1",
-      NODE_ENV: "production",
-    }),
-    { kind: "skip" },
-  );
-});
-
-test("CLI de Preview com apenas TURSO_* encerra antes de abrir banco", () => {
-  const baseEnv: NodeJS.ProcessEnv = {
-    ...process.env,
-    DATABASE_URL: "",
-    DATABASE_AUTH_TOKEN: "",
-    TURSO_DATABASE_URL: turso.TURSO_DATABASE_URL,
-    TURSO_AUTH_TOKEN: turso.TURSO_AUTH_TOKEN,
-    NODE_ENV: "production",
-    VERCEL: "1",
-    npm_lifecycle_event: "vercel-build",
-    ALLOW_REMOTE_MIGRATE: "1",
-  };
-  const preview = spawnSync(
-    process.execPath,
-    ["--import", "tsx", "scripts/migrate.ts"],
-    {
-      encoding: "utf8",
-      env: { ...baseEnv, VERCEL_ENV: "preview" },
-      timeout: 10_000,
-    },
-  );
-  assert.equal(preview.status, 0, preview.stderr);
-  assert.match(preview.stdout, /Migration ignorada/);
-  const blocked = spawnSync(
-    process.execPath,
-    ["--import", "tsx", "scripts/migrate.ts"],
-    {
-      encoding: "utf8",
-      env: {
-        ...baseEnv,
-        VERCEL_ENV: "development",
-        npm_lifecycle_event: "db:migrate",
-        ALLOW_REMOTE_MIGRATE: "",
-      },
-      timeout: 10_000,
-    },
-  );
-  assert.notEqual(blocked.status, 0);
-  assert.match(blocked.stderr, /Migration remota bloqueada/);
-  for (const result of [preview, blocked]) {
-    const output = `${result.stdout}${result.stderr}`;
-    assert.ok(!output.includes(turso.TURSO_DATABASE_URL));
-    assert.ok(!output.includes(turso.TURSO_AUTH_TOKEN));
-  }
+  for (const result of [preview, blocked])
+    for (const secret of [
+      pooled,
+      direct,
+      "test-only-secret",
+      "other-test-secret",
+    ])
+      assert.ok(!`${result.stdout}${result.stderr}`.includes(secret));
 });

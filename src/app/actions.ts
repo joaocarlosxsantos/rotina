@@ -31,7 +31,7 @@ async function mutate<T>(
         ? cause.message
         : "Não foi possível salvar. Confira o banco local e tente novamente.";
     if (!(cause instanceof InputError))
-      console.error("Falha ao salvar no SQLite local.");
+      console.error("Falha ao salvar no banco.");
   }
   if (error) redirect(`${destination}?error=${encodeURIComponent(error)}`);
   revalidatePath("/");
@@ -45,16 +45,17 @@ function destination(form: FormData) {
 
 export async function createRoutine(form: FormData) {
   await mutate(
-    () => addRoutine(getDatabase(), form.get("name"), form.getAll("days")),
+    async () =>
+      addRoutine(await getDatabase(), form.get("name"), form.getAll("days")),
     "Rotina criada. Agora adicione suas atividades.",
     destination(form),
   );
 }
 export async function createActivity(form: FormData) {
   await mutate(
-    () =>
+    async () =>
       addActivity(
-        getDatabase(),
+        await getDatabase(),
         form.get("routineId"),
         form.get("name"),
         form.get("time"),
@@ -66,9 +67,9 @@ export async function createActivity(form: FormData) {
 
 export async function editRoutine(form: FormData) {
   await mutate(
-    () =>
+    async () =>
       updateRoutine(
-        getDatabase(),
+        await getDatabase(),
         form.get("routineId"),
         form.get("name"),
         form.getAll("days"),
@@ -80,9 +81,9 @@ export async function editRoutine(form: FormData) {
 
 export async function editActivity(form: FormData) {
   await mutate(
-    () =>
+    async () =>
       updateActivity(
-        getDatabase(),
+        await getDatabase(),
         form.get("activityId"),
         form.get("name"),
         form.get("time"),
@@ -94,7 +95,7 @@ export async function editActivity(form: FormData) {
 
 export async function hideRoutine(form: FormData) {
   await mutate(
-    () => archiveRoutine(getDatabase(), form.get("routineId")),
+    async () => archiveRoutine(await getDatabase(), form.get("routineId")),
     "Rotina arquivada. Histórico e pontos preservados.",
     destination(form),
   );
@@ -102,21 +103,21 @@ export async function hideRoutine(form: FormData) {
 
 export async function hideActivity(form: FormData) {
   await mutate(
-    () => archiveActivity(getDatabase(), form.get("activityId")),
+    async () => archiveActivity(await getDatabase(), form.get("activityId")),
     "Atividade arquivada. Histórico e pontos preservados.",
     destination(form),
   );
 }
 export async function finishActivity(form: FormData) {
   await mutate(
-    () => completeActivity(getDatabase(), form.get("activityId")),
+    async () => completeActivity(await getDatabase(), form.get("activityId")),
     completionMessage,
   );
 }
 
 export async function passActivity(form: FormData) {
   await mutate(
-    () => skipActivity(getDatabase(), form.get("activityId")),
+    async () => skipActivity(await getDatabase(), form.get("activityId")),
     skipMessage,
   );
 }

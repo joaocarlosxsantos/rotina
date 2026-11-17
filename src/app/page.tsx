@@ -26,7 +26,7 @@ export default async function Home({
   searchParams: Promise<{ error?: string; success?: string }>;
 }) {
   const now = new Date();
-  const data = await dashboard(getDatabase(), now);
+  const data = await dashboard(await getDatabase(), now);
   const query = await searchParams;
   const progress = data.total ? Math.round((data.done / data.total) * 100) : 0;
   const date = new Intl.DateTimeFormat("pt-BR", {

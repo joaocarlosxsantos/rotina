@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, desc, eq, isNull, lte, sql } from "drizzle-orm";
-import type { createDatabase } from "../db/client";
+import type { Database } from "../db/client";
 import { activities, completions, routines } from "../db/schema";
 import {
   ALL_WEEKDAYS,
@@ -18,8 +18,6 @@ import {
   weekdaysMask,
 } from "./rules";
 
-type Database = ReturnType<typeof createDatabase>["db"];
-
 export async function addRoutine(
   db: Database,
   name: unknown,
@@ -30,7 +28,7 @@ export async function addRoutine(
     name: validName(name),
     weekdays: weekdaysMask(days),
     archivedAt: null,
-    createdAt: Date.now(),
+    createdAt: new Date(),
   };
   await db.insert(routines).values(row);
   return row;
@@ -58,14 +56,14 @@ export async function archiveRoutine(db: Database, routineId: unknown) {
   const id = validId(routineId);
   const rows = await db
     .update(routines)
-    .set({ archivedAt: Date.now() })
+    .set({ archivedAt: new Date() })
     .where(and(eq(routines.id, id), isNull(routines.archivedAt)))
     .returning();
   if (!rows.length)
     throw new InputError("Rotina ativa não encontrada. Atualize a página.");
 }
 
-const activeParent = sql`exists (select 1 from ${routines} where ${routines.id} = ${activities.routineId} and ${routines.archivedAt} is null)`;
+const activeParent = sql`exists (select 1 from ${routines} where ${routines.id} = ${activities.routineId} and ${routines.archivedAt} is null for share)`;
 
 export async function addActivity(
   db: Database,
@@ -82,17 +80,18 @@ export async function addActivity(
     .select(
       db
         .select({
-          id: sql<string>`${randomUUID()}`.as("id"),
+          id: sql<string>`${randomUUID()}::uuid`.as("id"),
           routineId: routines.id,
           name: sql<string>`${activityName}`.as("name"),
-          scheduledTime: sql<string | null>`${scheduledTime}`.as(
+          scheduledTime: sql<string | null>`${scheduledTime}::text`.as(
             "scheduled_time",
           ),
-          archivedAt: sql<null>`null`.as("archived_at"),
-          createdAt: sql<number>`${Date.now()}`.as("created_at"),
+          archivedAt: sql<Date | null>`null::timestamptz`.as("archived_at"),
+          createdAt: sql<Date>`now()`.as("created_at"),
         })
         .from(routines)
-        .where(and(eq(routines.id, id), isNull(routines.archivedAt))),
+        .where(and(eq(routines.id, id), isNull(routines.archivedAt)))
+        .for("share", { of: routines }),
     )
     .returning();
   if (!rows.length)
@@ -124,7 +123,7 @@ export async function archiveActivity(db: Database, activityId: unknown) {
   const id = validId(activityId);
   const rows = await db
     .update(activities)
-    .set({ archivedAt: Date.now() })
+    .set({ archivedAt: new Date() })
     .where(
       and(eq(activities.id, id), isNull(activities.archivedAt), activeParent),
     )
@@ -156,80 +155,86 @@ async function recordActivity(
   now: Date,
 ) {
   const id = validId(activityId);
-  const dayBit = 1 << weekdaySP(now);
   const day = dayKey(now);
-  const points = status === "completed" ? POINTS_PER_ACTIVITY : -SKIP_PENALTY;
-  // Só os cinco dias anteriores importam para o teto do bônus. A leitura é parte do INSERT.
-  const bonus =
-    status === "skipped"
-      ? sql<number>`0`
-      : sql<number>`(
-    with recursive consecutive(day, count) as (
-      select date(${day}, '-1 day'), 0
-      union all
-      select date(day, '-1 day'), count + 1 from consecutive
-      where count < ${MAX_STREAK_BONUS} and exists (
-        select 1 from ${completions} history
-        where history.day = consecutive.day and history.status = 'completed'
-      )
-    ) select max(count) from consecutive
-  )`;
-  const nextOrder = sql<number>`(select coalesce(max(event_order), 0) + 1 from ${completions})`;
-  const previousBalance = sql<number>`coalesce((select balance_after from ${completions} order by event_order desc limit 1), 0)`;
-  const eligible = and(
-    eq(activities.id, id),
-    isNull(activities.archivedAt),
-    isNull(routines.archivedAt),
-    sql`(${routines.weekdays} & ${dayBit}) != 0`,
-  );
-  // Agenda, exclusividade, bônus e saldo são verificados na mesma escrita atômica.
-  const inserted = await db
-    .insert(completions)
-    .select(
-      db
-        .select({
-          id: sql<string>`${randomUUID()}`.as("id"),
-          activityId: activities.id,
-          day: sql<string>`${day}`.as("day"),
-          points: sql<number>`${points}`.as("points"),
-          status: sql<"completed" | "skipped">`${status}`.as("status"),
-          bonus: bonus.as("bonus"),
-          eventOrder: nextOrder.as("event_order"),
-          balanceAfter:
-            sql<number>`max(0, ${previousBalance} + ${points} + ${bonus})`.as(
-              "balance_after",
-            ),
-        })
+  const dayBit = 1 << weekdaySP(now);
+  return db.transaction(
+    async (tx) => {
+      // Lock transacional global enquanto não há login; serializa saldo e bônus entre instâncias.
+      await tx.execute(sql`select pg_advisory_xact_lock(724681, 1)`);
+      const [activity] = await tx
+        .select({ id: activities.id })
         .from(activities)
         .innerJoin(routines, eq(activities.routineId, routines.id))
-        .where(eligible),
-    )
-    .onConflictDoNothing({ target: [completions.activityId, completions.day] })
-    .returning();
-  if (inserted.length) return true;
-  const activity = await db
-    .select({ id: activities.id })
-    .from(activities)
-    .innerJoin(routines, eq(activities.routineId, routines.id))
-    .where(eligible)
-    .get();
-  if (!activity)
-    throw new InputError(
-      "Atividade indisponível hoje ou arquivada. Atualize a página.",
-    );
-  const existing = await db
-    .select({ status: completions.status })
-    .from(completions)
-    .where(and(eq(completions.activityId, id), eq(completions.day, day)))
-    .get();
-  if (existing && existing.status !== status) {
-    throw new InputError(
-      existing.status === "completed"
-        ? "Atividade já concluída hoje. Não é possível pular no mesmo dia."
-        : "Atividade já pulada hoje. Não é possível concluir no mesmo dia.",
-    );
-  }
-  return false;
+        .where(
+          and(
+            eq(activities.id, id),
+            isNull(activities.archivedAt),
+            isNull(routines.archivedAt),
+            sql`(${routines.weekdays} & ${dayBit}) != 0`,
+          ),
+        )
+        .for("share", { of: [activities, routines] })
+        .limit(1);
+      if (!activity)
+        throw new InputError(
+          "Atividade indisponível hoje ou arquivada. Atualize a página.",
+        );
+      const [existing] = await tx
+        .select({ status: completions.status })
+        .from(completions)
+        .where(and(eq(completions.activityId, id), eq(completions.day, day)))
+        .limit(1);
+      if (existing) {
+        if (existing.status === status) return false;
+        throw new InputError(
+          existing.status === "completed"
+            ? "Atividade já concluída hoje. Não é possível pular no mesmo dia."
+            : "Atividade já pulada hoje. Não é possível concluir no mesmo dia.",
+        );
+      }
+      const days = await tx
+        .selectDistinct({ day: completions.day })
+        .from(completions)
+        .where(
+          and(eq(completions.status, "completed"), lte(completions.day, day)),
+        );
+      const bonus =
+        status === "completed"
+          ? Math.min(
+              currentStreak([...days.map((row) => row.day), day], day) - 1,
+              MAX_STREAK_BONUS,
+            )
+          : 0;
+      const [last] = await tx
+        .select({
+          balance: completions.balanceAfter,
+          order: completions.eventOrder,
+        })
+        .from(completions)
+        .orderBy(desc(completions.eventOrder))
+        .limit(1);
+      const points =
+        status === "completed" ? POINTS_PER_ACTIVITY : -SKIP_PENALTY;
+      const inserted = await tx
+        .insert(completions)
+        .values({
+          id: randomUUID(),
+          activityId: id,
+          day,
+          points,
+          status,
+          bonus,
+          eventOrder: (last?.order ?? 0) + 1,
+          balanceAfter: Math.max(0, (last?.balance ?? 0) + points + bonus),
+        })
+        .onConflictDoNothing({
+          target: [completions.activityId, completions.day],
+        })
+        .returning({ id: completions.id });
+      return inserted.length > 0;
+    },
+    { isolationLevel: "read committed" },
+  );
 }
 
 export async function catalog(db: Database) {
@@ -284,7 +289,7 @@ export async function dashboard(db: Database, now = new Date()) {
         .select({ value: completions.balanceAfter })
         .from(completions)
         .orderBy(desc(completions.eventOrder))
-        .get(),
+        .limit(1),
       db
         .selectDistinct({ day: completions.day })
         .from(completions)
@@ -328,7 +333,7 @@ export async function dashboard(db: Database, now = new Date()) {
     })),
     done,
     total: activeActivities.length,
-    points: Number(score?.value ?? 0),
+    points: Number(score[0]?.value ?? 0),
     streak: currentStreak(
       completedDays.map((row) => row.day),
       dayKey(now),

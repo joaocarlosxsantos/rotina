@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdtemp, rm, mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { migrate } from "drizzle-orm/libsql/migrator";
+import { migrateDatabase } from "../src/db/migrations";
 import { createDatabase } from "../src/db/client";
 import {
   addActivity,
@@ -22,11 +21,14 @@ import {
 } from "../src/lib/rules";
 
 test("rotina persiste, pontua uma vez por dia e renova atividades sem perder pontos", async () => {
-  const folder = await mkdtemp(join(tmpdir(), "rotina-test-"));
-  const url = `file:${join(folder, "test.db").replaceAll("\\", "/")}`;
-  let connection = createDatabase(url);
+  await mkdir(join(process.cwd(), "data"), { recursive: true });
+  const folder = await mkdtemp(
+    join(process.cwd(), "data", "pg-persistence-test-"),
+  );
+  const url = `pglite:${folder}`;
+  let connection = await createDatabase(url);
   try {
-    await migrate(connection.db, { migrationsFolder: "./drizzle" });
+    await migrateDatabase(connection);
     const routine = await addRoutine(connection.db, "  Minha manhã  ");
     const activity = await addActivity(connection.db, routine.id, "Caminhar");
     const today = new Date("2026-11-17T14:00:00Z");
@@ -50,8 +52,8 @@ test("rotina persiste, pontua uma vez por dia e renova atividades sem perder pon
     assert.equal(state.done, 1);
     assert.equal(state.mood, "feliz");
     assert.equal(state.routines[0].name, "Minha manhã");
-    connection.client.close();
-    connection = createDatabase(url);
+    await connection.close();
+    connection = await createDatabase(url);
     assert.equal((await dashboard(connection.db, today)).points, 10);
     const tomorrow = new Date("2026-11-18T14:00:00Z");
     const next = await dashboard(connection.db, tomorrow);
@@ -83,7 +85,7 @@ test("rotina persiste, pontua uma vez por dia e renova atividades sem perder pon
       InputError,
     );
   } finally {
-    connection.client.close();
+    await connection.close();
     await rm(folder, {
       recursive: true,
       force: true,

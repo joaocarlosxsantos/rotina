@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const config: NextConfig = {
-  serverExternalPackages: ["@libsql/client"],
+  serverExternalPackages: ["@neondatabase/serverless", "@electric-sql/pglite"],
   poweredByHeader: false,
   outputFileTracingExcludes: {
     "/*": ["./.env*", "./data/**/*", "./.maestri/**/*", "./.impeccable/**/*"],

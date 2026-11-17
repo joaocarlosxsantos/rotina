@@ -1,19 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { randomUUID } from "node:crypto";
-import {
-  mkdtemp,
-  mkdir,
-  readFile,
-  writeFile,
-  copyFile,
-  rm,
-} from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { spawnSync } from "node:child_process";
-import { migrate } from "drizzle-orm/libsql/migrator";
-import { createDatabase } from "../src/db/client";
 import { activities, completions, routines } from "../src/db/schema";
 import {
   addActivity,
@@ -36,18 +23,7 @@ import {
   weekdaySP,
   weekdaysMask,
 } from "../src/lib/rules";
-
-async function withDatabase(
-  work: (db: ReturnType<typeof createDatabase>["db"]) => Promise<void>,
-) {
-  const { client, db } = createDatabase("file::memory:");
-  try {
-    await migrate(db, { migrationsFolder: "./drizzle" });
-    await work(db);
-  } finally {
-    client.close();
-  }
-}
+import { withDatabase } from "./helpers";
 
 const tuesday = new Date("2026-11-17T14:00:00Z");
 const wednesday = new Date("2026-11-18T14:00:00Z");
@@ -146,10 +122,7 @@ test("virada 02:59Z/03:00Z em completeActivity troca o dia elegível e o dia gra
     );
     const before = new Date("2026-11-22T02:59:59Z");
     const after = new Date("2026-11-22T03:00:00Z");
-    assert.equal(
-      await completeActivity(db, saturdayActivity.id, before),
-      true,
-    );
+    assert.equal(await completeActivity(db, saturdayActivity.id, before), true);
     assert.equal(
       await completeActivity(db, saturdayActivity.id, before),
       false,
@@ -158,10 +131,7 @@ test("virada 02:59Z/03:00Z em completeActivity troca o dia elegível e o dia gra
       () => completeActivity(db, saturdayActivity.id, after),
       InputError,
     );
-    assert.equal(
-      await completeActivity(db, sundayActivity.id, after),
-      true,
-    );
+    assert.equal(await completeActivity(db, sundayActivity.id, after), true);
     await assert.rejects(
       () => completeActivity(db, sundayActivity.id, before),
       InputError,
@@ -388,84 +358,4 @@ test("servidor rejeita nomes, IDs, dias e horários inválidos antes de alterar 
     assert.equal(all[0].activities[0].name, "Atividade válida");
     assert.equal(all[0].activities[0].scheduledTime, "09:00");
   });
-});
-
-test("migration incremental conserva dados da fase 1 e preenche todos os dias por padrão", async () => {
-  const folder = await mkdtemp(join(tmpdir(), "rotina-migrations-"));
-  const { client, db } = createDatabase("file::memory:");
-  try {
-    await mkdir(join(folder, "meta"));
-    const journal = JSON.parse(
-      await readFile("./drizzle/meta/_journal.json", "utf8"),
-    );
-    const first = journal.entries[0];
-    await writeFile(
-      join(folder, "meta", "_journal.json"),
-      JSON.stringify({ ...journal, entries: [first] }),
-    );
-    await copyFile(
-      `./drizzle/${first.tag}.sql`,
-      join(folder, `${first.tag}.sql`),
-    );
-    await migrate(db, { migrationsFolder: folder });
-    const routineId = randomUUID();
-    const activityId = randomUUID();
-    await client.execute({
-      sql: "insert into routines(id,name,created_at) values(?,?,?)",
-      args: [routineId, "Legada", 1],
-    });
-    await client.execute({
-      sql: "insert into activities(id,routine_id,name,created_at) values(?,?,?,?)",
-      args: [activityId, routineId, "Legada", 1],
-    });
-    await client.execute({
-      sql: "insert into completions(id,activity_id,day,points) values(?,?,?,?)",
-      args: [randomUUID(), activityId, "2026-11-17", 10],
-    });
-    await migrate(db, { migrationsFolder: "./drizzle" });
-    await migrate(db, { migrationsFolder: "./drizzle" });
-    const migrated = await catalog(db);
-    assert.equal(migrated[0].id, routineId);
-    assert.equal(migrated[0].weekdays, 127);
-    assert.equal(migrated[0].archivedAt, null);
-    assert.equal(migrated[0].activities[0].scheduledTime, null);
-    assert.equal(migrated[0].activities[0].archivedAt, null);
-    const state = await dashboard(db, tuesday);
-    assert.equal(state.points, 10);
-    assert.equal(state.done, 1);
-  } finally {
-    client.close();
-    await rm(folder, { recursive: true, force: true });
-  }
-});
-
-test("script de migration rejeita produção e URL remota antes de abrir o banco", () => {
-  const production = spawnSync(
-    process.execPath,
-    ["--import", "tsx", "scripts/migrate.ts"],
-    {
-      encoding: "utf8",
-      env: {
-        ...process.env,
-        NODE_ENV: "production",
-        DATABASE_URL: "file:./data/never-production.db",
-      },
-    },
-  );
-  assert.notEqual(production.status, 0);
-  assert.match(production.stderr, /Migration de producao bloqueada/);
-  const remote = spawnSync(
-    process.execPath,
-    ["--import", "tsx", "scripts/migrate.ts"],
-    {
-      encoding: "utf8",
-      env: {
-        ...process.env,
-        NODE_ENV: "test",
-        DATABASE_URL: "libsql://invalid.example",
-      },
-    },
-  );
-  assert.notEqual(remote.status, 0);
-  assert.match(remote.stderr, /Migration remota bloqueada/);
 });

@@ -20,7 +20,7 @@ export default async function Manage({
 }: {
   searchParams: Promise<{ error?: string; success?: string }>;
 }) {
-  const rows = await catalog(getDatabase());
+  const rows = await catalog(await getDatabase());
   const query = await searchParams;
   const active = rows.filter((row) => row.archivedAt === null);
   const archived = rows.filter((row) => row.archivedAt !== null);

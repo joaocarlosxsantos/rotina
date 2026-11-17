@@ -1,43 +1,40 @@
 import {
   databaseConfiguration,
-  databaseCredentials,
-  localDatabaseUrl,
+  type DatabaseConfiguration,
   type DatabaseEnvironment,
 } from "./client";
 
-export type MigrationPlan =
-  | { kind: "skip" }
-  | { kind: "local"; url: string }
-  | { kind: "remote"; url: string; authToken: string };
-
+export type MigrationPlan = { kind: "skip" } | DatabaseConfiguration;
 export function migrationPlan(
   env: DatabaseEnvironment = process.env,
+  projectRoot = process.cwd(),
 ): MigrationPlan {
-  // Preview nunca migra, mesmo com override ou credenciais disponíveis.
   if (
     env.VERCEL_ENV === "preview" ||
     (env.npm_lifecycle_event === "vercel-build" &&
       env.VERCEL_ENV !== "production")
   )
     return { kind: "skip" };
-  const { url } = databaseCredentials(env);
-  if (url.startsWith("libsql://")) {
-    if (env.VERCEL_ENV !== "production" && env.ALLOW_REMOTE_MIGRATE !== "1") {
+  const remote =
+    env.VERCEL !== undefined ||
+    env.NODE_ENV === "production" ||
+    !!env.DATABASE_URL_UNPOOLED?.trim() ||
+    !!(env.DATABASE_URL?.match(/^postgres(ql)?:/) || env.POSTGRES_URL);
+  if (remote) {
+    const deployedProduction =
+      env.VERCEL !== undefined && env.VERCEL_ENV === "production";
+    if (!deployedProduction && env.ALLOW_REMOTE_MIGRATE !== "1")
       throw new Error(
-        "Migration remota bloqueada: exige VERCEL_ENV=production ou ALLOW_REMOTE_MIGRATE=1; Preview nunca migra.",
+        "Migration remota bloqueada; ambiente local exige ALLOW_REMOTE_MIGRATE=1.",
       );
-    }
-    // A autorização explícita vale só para o migrator; não altera o ambiente do app.
-    const config = databaseConfiguration({ ...env, NODE_ENV: "production" });
-    if (config.kind !== "remote")
-      throw new Error("Migration remota exige configuração libsql válida.");
-    return config;
-  }
-  if (env.VERCEL_ENV === "production")
-    throw new Error(
-      "Deploy de produção exige URL libsql e token (DATABASE_* ou TURSO_*).",
+    const url =
+      env.DATABASE_URL_UNPOOLED?.trim() ||
+      env.DATABASE_URL?.trim() ||
+      env.POSTGRES_URL?.trim();
+    return databaseConfiguration(
+      { ...env, NODE_ENV: "production", DATABASE_URL: url },
+      projectRoot,
     );
-  if (env.NODE_ENV === "production")
-    throw new Error("Migration de producao bloqueada para SQLite local.");
-  return { kind: "local", url: localDatabaseUrl(url) };
+  }
+  return databaseConfiguration(env, projectRoot);
 }

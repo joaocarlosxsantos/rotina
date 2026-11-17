@@ -1,209 +1,172 @@
-import { createClient } from "@libsql/client";
-import { drizzle } from "drizzle-orm/libsql";
+import { Pool, neonConfig } from "@neondatabase/serverless";
+import { drizzle as neonDrizzle } from "drizzle-orm/neon-serverless";
+import type { NeonDatabase } from "drizzle-orm/neon-serverless";
+import type { PgliteDatabase } from "drizzle-orm/pglite";
+import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import { existsSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import * as schema from "./schema";
 
-const DEFAULT_DATABASE_URL = "file:./data/rotina.db";
-
 export type DatabaseEnvironment = Readonly<Record<string, string | undefined>>;
-export type DatabaseCredentials = Readonly<{
-  url: string;
-  authToken?: string;
-}>;
-
-function firstConfigured(
-  primary: string | undefined,
-  fallback: string | undefined,
-) {
-  return primary?.trim() || fallback?.trim() || "";
-}
-
-export function databaseCredentials(
-  env: DatabaseEnvironment = process.env,
-): DatabaseCredentials {
-  const url = firstConfigured(env.DATABASE_URL, env.TURSO_DATABASE_URL);
-  const authToken = firstConfigured(
-    env.DATABASE_AUTH_TOKEN,
-    env.TURSO_AUTH_TOKEN,
-  );
-  return { url, ...(authToken ? { authToken } : {}) };
-}
+export type Database = PgDatabase<PgQueryResultHKT, typeof schema>;
+export type DatabaseConfiguration =
+  { kind: "pglite"; dataDir: string } | { kind: "neon"; url: string };
+export type DatabaseConnection =
+  | {
+      kind: "pglite";
+      db: PgliteDatabase<typeof schema>;
+      close: () => Promise<void>;
+    }
+  | {
+      kind: "neon";
+      db: NeonDatabase<typeof schema>;
+      close: () => Promise<void>;
+    };
 
 function isWithin(root: string, target: string) {
   const rel = relative(root, target);
-  return (
-    rel === "" ||
-    (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel))
-  );
+  return rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
 }
 
-function realpathOfExistingAncestor(target: string) {
-  let current = target;
-  while (!existsSync(current)) {
-    const parent = dirname(current);
-    if (parent === current) break;
-    current = parent;
+export function localDatabaseDirectory(
+  value = "",
+  projectRoot = process.cwd(),
+): string {
+  if (value === "memory://") return value;
+  const raw = value || "pglite:./data/pglite";
+  if (!raw.startsWith("pglite:"))
+    throw new Error("Dev/teste usam somente PGlite local ou memory://.");
+  const path = raw.slice(7);
+  const drive = /^[A-Za-z]:/.test(path);
+  if (
+    !path ||
+    /[%?#\u0000-\u001f\u007f]/.test(path) ||
+    /^[\\/]{2}/.test(path) ||
+    path.split(/[\\/]+/).includes("..") ||
+    (drive && !isAbsolute(path)) ||
+    path.indexOf(":", drive ? 2 : 0) !== -1
+  ) {
+    throw new Error(
+      "Diretório PGlite inválido; use um caminho simples dentro do projeto.",
+    );
   }
-  return realpathSync(current);
-}
-
-export function localDatabaseUrl(
-  url: string | undefined = databaseCredentials().url,
-  projectRoot: string = process.cwd(),
-) {
-  const raw = (url ?? "").trim() || DEFAULT_DATABASE_URL;
-  if (!raw.startsWith("file:"))
-    throw new Error("Fase 1 permite apenas SQLite local (file:).");
-
-  const filePath = raw.slice("file:".length);
-  if (!filePath)
-    throw new Error("URL local inválida: informe um caminho apos 'file:'.");
-  if (raw.includes("%"))
-    throw new Error(
-      "URL local inválida: percent-encoding ('%') nao e permitido no caminho.",
-    );
-  if (filePath === ":memory:" || filePath.startsWith(":memory:"))
-    throw new Error(
-      "URL local inválida: banco em memoria nao e permitido; use um arquivo dentro do projeto.",
-    );
-
-  const drivePath = /^[A-Za-z]:/.test(filePath);
-  if (drivePath && !isAbsolute(filePath))
-    throw new Error(
-      "URL local inválida: caminho relativo a unidade (drive-relative) nao e permitido.",
-    );
-  if (filePath.indexOf(":", drivePath ? 2 : 0) !== -1)
-    throw new Error(
-      "URL local inválida: ':' (fluxo alternativo de dados) nao e permitido no caminho.",
-    );
-  if (/[?#]/.test(filePath))
-    throw new Error(
-      "URL local inválida: query string e fragmento nao sao suportados.",
-    );
-  if (/^[\\/]{2}/.test(filePath))
-    throw new Error(
-      "URL local inválida: caminhos de rede nao sao permitidos; use um arquivo dentro do projeto.",
-    );
-  if (filePath.split(/[\\/]+/).includes(".."))
-    throw new Error("URL local inválida: '..' nao e permitido no caminho.");
-
   const root = resolve(/* turbopackIgnore: true */ projectRoot);
-  const target = isAbsolute(filePath)
-    ? resolve(filePath)
-    : resolve(root, filePath);
-  if (relative(root, target) === "" || !isWithin(root, target))
-    throw new Error(
-      "URL local inválida: o banco deve ficar dentro do diretorio do projeto.",
-    );
-
-  let realRoot: string;
-  let realAncestor: string;
-  try {
-    realRoot = realpathSync(/* turbopackIgnore: true */ root);
-    realAncestor = realpathOfExistingAncestor(target);
-  } catch {
-    throw new Error(
-      "URL local inválida: nao foi possivel verificar o caminho do banco.",
-    );
+  const target = resolve(root, path);
+  if (target === root || !isWithin(root, target))
+    throw new Error("Diretório PGlite deve ficar dentro do projeto.");
+  let ancestor = target;
+  while (!existsSync(ancestor)) ancestor = dirname(ancestor);
+  if (
+    !isWithin(
+      realpathSync(/* turbopackIgnore: true */ root),
+      realpathSync(/* turbopackIgnore: true */ ancestor),
+    )
+  ) {
+    throw new Error("Diretório PGlite não pode escapar do projeto por link.");
   }
-  if (!isWithin(realRoot, realAncestor))
-    throw new Error(
-      "URL local inválida: o banco nao pode apontar (via link) para fora do diretorio do projeto.",
-    );
-  return raw;
+  return target;
 }
-
-export type DatabaseConfiguration =
-  | { kind: "local"; url: string; authToken?: never }
-  | { kind: "remote"; url: string; authToken: string };
 
 export function databaseConfiguration(
   env: DatabaseEnvironment = process.env,
   projectRoot = process.cwd(),
 ): DatabaseConfiguration {
-  const { url: raw, authToken } = databaseCredentials(env);
-  if (raw.startsWith("libsql://")) {
-    if (env.VERCEL === undefined && env.NODE_ENV !== "production") {
-      throw new Error(
-        "Banco remoto permitido apenas na Vercel ou em NODE_ENV=production; desenvolvimento/teste usam apenas SQLite local.",
-      );
-    }
-    let parsed: URL;
-    try {
-      parsed = new URL(raw);
-    } catch {
-      throw new Error(
-        "URL remota inválida; use libsql:// com um host válido.",
-      );
-    }
-    if (
-      !parsed.hostname ||
-      parsed.username ||
-      parsed.password ||
-      parsed.search ||
-      parsed.hash ||
-      (parsed.pathname !== "" && parsed.pathname !== "/") ||
-      /[\s\u0000-\u001f\u007f]/.test(raw)
-    ) {
-      throw new Error(
-        "URL remota inválida; credenciais, parâmetros e caminhos não são permitidos na URL.",
-      );
-    }
-    if (!authToken)
-      throw new Error(
-        "DATABASE_AUTH_TOKEN ou TURSO_AUTH_TOKEN é obrigatório para o banco remoto.",
-      );
-    return { kind: "remote", url: raw, authToken };
-  }
-  if (env.VERCEL !== undefined)
+  const raw = env.DATABASE_URL?.trim() || env.POSTGRES_URL?.trim() || "";
+  const production = env.VERCEL !== undefined || env.NODE_ENV === "production";
+  if (!production)
+    return {
+      kind: "pglite",
+      dataDir: localDatabaseDirectory(raw, projectRoot),
+    };
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
     throw new Error(
-      "Na Vercel, configure DATABASE_URL/DATABASE_AUTH_TOKEN ou TURSO_DATABASE_URL/TURSO_AUTH_TOKEN; não use SQLite em arquivo.",
+      "Produção exige DATABASE_URL ou POSTGRES_URL Postgres do Neon.",
     );
-  return { kind: "local", url: localDatabaseUrl(raw, projectRoot) };
+  }
+  if (
+    !["postgres:", "postgresql:"].includes(url.protocol) ||
+    !url.hostname.endsWith(".neon.tech") ||
+    !url.username ||
+    !url.password ||
+    url.pathname.length < 2 ||
+    url.hash ||
+    [...url.searchParams.keys()].some(
+      (key) =>
+        ![
+          "sslmode",
+          "channel_binding",
+          "connect_timeout",
+          "application_name",
+        ].includes(key),
+    ) ||
+    /[\s\u0000-\u001f\u007f]/.test(raw) ||
+    url.searchParams.get("sslmode") === "disable"
+  ) {
+    throw new Error(
+      "Configuração Postgres do Neon inválida; dados de conexão omitidos.",
+    );
+  }
+  return { kind: "neon", url: raw };
 }
 
-export function createDatabase(
-  url: string,
-  authToken?: string,
-  factory: typeof createClient = createClient,
-  env: DatabaseEnvironment = process.env,
-) {
-  // Fixtures locais podem usar memória; nenhum caminho remoto ignora a política.
-  const envAuthToken = databaseCredentials(env).authToken;
-  const config = url.startsWith("file:")
-    ? { url, authToken: undefined }
-    : databaseConfiguration({
-        ...env,
-        DATABASE_URL: url,
-        DATABASE_AUTH_TOKEN: authToken ?? envAuthToken,
-      });
-  const client = factory({
-    url: config.url,
-    ...(config.authToken ? { authToken: config.authToken } : {}),
-  });
-  return { client, db: drizzle(client, { schema }) };
+export async function createDatabase(
+  value = "memory://",
+  projectRoot = process.cwd(),
+): Promise<Extract<DatabaseConnection, { kind: "pglite" }>> {
+  const dataDir = localDatabaseDirectory(value, projectRoot);
+  const { PGlite } = await import("@electric-sql/pglite");
+  const { drizzle } = await import("drizzle-orm/pglite");
+  const client = new PGlite(dataDir);
+  await client.waitReady;
+  return {
+    kind: "pglite",
+    db: drizzle(client, { schema }),
+    close: () => client.close(),
+  };
 }
 
-export function configuredDatabase(
+export async function configuredDatabase(
   env: DatabaseEnvironment = process.env,
   projectRoot = process.cwd(),
-  factory: typeof createClient = createClient,
-) {
+  remoteFactory?: (url: string) => Promise<DatabaseConnection>,
+): Promise<DatabaseConnection> {
   const config = databaseConfiguration(env, projectRoot);
+  if (config.kind === "pglite")
+    return createDatabase(
+      config.dataDir === "memory://" ? "memory://" : `pglite:${config.dataDir}`,
+      projectRoot,
+    );
   try {
-    return createDatabase(config.url, config.authToken, factory, env);
-  } catch (error) {
-    if (config.kind === "remote")
-      throw new Error(
-        "Falha ao configurar o banco remoto; dados de conexão omitidos.",
-      );
-    throw error;
+    if (remoteFactory) return await remoteFactory(config.url);
+    if (typeof WebSocket === "undefined")
+      throw new Error("Node.js 22+ necessário.");
+    neonConfig.webSocketConstructor = WebSocket;
+    const pool = new Pool({
+      connectionString: config.url,
+      max: 5,
+      connectionTimeoutMillis: 10_000,
+      idleTimeoutMillis: 10_000,
+    });
+    pool.on("error", () =>
+      console.error("Conexão Postgres indisponível; credenciais omitidas."),
+    );
+    return {
+      kind: "neon",
+      db: neonDrizzle(pool, { schema }),
+      close: () => pool.end(),
+    };
+  } catch {
+    throw new Error("Falha ao configurar Postgres; credenciais omitidas.");
   }
 }
 
-let connection: ReturnType<typeof createDatabase> | undefined;
-export function getDatabase() {
-  connection ??= configuredDatabase();
-  return connection.db;
+const shared = globalThis as typeof globalThis & {
+  rotinaPostgres?: Promise<DatabaseConnection>;
+};
+export async function getDatabase(): Promise<Database> {
+  shared.rotinaPostgres ??= configuredDatabase();
+  return (await shared.rotinaPostgres).db;
 }
