@@ -13,6 +13,7 @@ import {
   updateActivity,
   archiveRoutine,
   archiveActivity,
+  setUserPet,
 } from "../lib/store";
 import { completionMessage, InputError, skipMessage } from "../lib/rules";
 
@@ -37,6 +38,7 @@ async function mutate<T>(
   if (error) redirect(`${destination}?error=${encodeURIComponent(error)}`);
   revalidatePath("/");
   revalidatePath("/rotinas");
+  revalidatePath("/pets");
   redirect(`${destination}?success=${encodeURIComponent(success)}`);
 }
 
@@ -128,5 +130,15 @@ export async function passActivity(form: FormData) {
   await mutate(
     async () => skipActivity(await getDatabase(), user, form.get("activityId")),
     skipMessage,
+  );
+}
+
+export async function selectPet(form: FormData) {
+  const user = await requireCurrentUser();
+  const petKind = form.get("petKind");
+  await mutate(
+    async () => setUserPet(await getDatabase(), user, petKind),
+    "Companheiro atualizado com sucesso!",
+    "/pets",
   );
 }
