@@ -6,8 +6,13 @@ import { createDatabase, localDatabaseUrl } from "../src/db/client";
 async function main() {
   if (process.env.NODE_ENV === "production")
     throw new Error("Migration de producao bloqueada nesta fase.");
-  const url = localDatabaseUrl();
-  await mkdir(dirname(resolve(url.slice(5))), { recursive: true });
+  let url: string;
+  try {
+    url = localDatabaseUrl();
+  } catch (error) {
+    throw new Error(`Migration recusada: ${(error as Error).message}`);
+  }
+  await mkdir(dirname(resolve(url.slice("file:".length))), { recursive: true });
   const { client, db } = createDatabase(url);
   try {
     await migrate(db, { migrationsFolder: "./drizzle" });
