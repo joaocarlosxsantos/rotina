@@ -25,7 +25,7 @@ colors:
   error-surface: "#f7e3d9"
   error-text: "#7b2d1b"
   pet-fill: "#a9ca7b"
-  pet-blush: "#d58068"
+  pet-blush: "#d78f82"
 typography:
   display:
     fontFamily: 'Georgia, "Times New Roman", serif'
@@ -159,14 +159,14 @@ components:
 
 Esta é uma descrição provisória extraída da interface implementada, não uma identidade de marca aprovada. O fundo papel, o texto verde escuro e os títulos serifados dão à tela o caráter de um caderno de uso diário. Listas separadas por linhas e formulários próximos das atividades mantêm a leitura direta.
 
-O pet pixel é o elemento ilustrado característico: sua expressão acompanha o estado do dia e vem acompanhada de texto. A interface atual é estática, sem animações ou transições. Público específico, identidade de marca e linguagem visual de futuras telas continuam em aberto; esta documentação registra o código atual.
+O pet pixel é o elemento ilustrado característico: sua expressão acompanha o estado do dia e vem acompanhada de texto. Os pets têm uma saudação breve que termina em 4,8s e respeita a preferência de movimento reduzido. Público específico, identidade de marca e linguagem visual de futuras telas continuam em aberto; esta documentação registra o código atual.
 
 **Key Characteristics:**
 - Papel claro e verde escuro, com superfícies verde suave.
 - Títulos serifados e controles sem serifa, usando fontes locais.
 - Rotinas em listas com divisórias e formulários no contexto.
 - Companheiro pixel original com três expressões e humor escrito.
-- Estados de formulário legíveis, foco visível e ausência de movimento.
+- Estados de formulário legíveis, foco visível e movimento breve dos pets com alternativa estática.
 
 ## Colors
 
@@ -175,14 +175,14 @@ A paleta usa verdes sóbrios sobre papel claro; os tons quentes sinalizam foco, 
 ### Primary
 
 - **Verde de ação** (`green`): botões principais, contorno dos botões e progresso concluído. `green-hover` escurece a ação ao passar o ponteiro.
-- **Verde de tinta** (`ink`): texto principal e contorno do pet.
+- **Verde de tinta** (`ink`): texto principal; os pets usam contornos próprios por espécie.
 - **Verde suave** (`pale`): abrigo do pet, formulário de nova rotina, aviso de sucesso e botão desabilitado.
 
 ### Secondary
 
 - **Terracota de foco** (`orange`): foco de teclado, cursor de texto e quadrado da assinatura.
 - **Erro** (`invalid`, `error-surface`, `error-text`): borda de entrada inválida e aviso de erro.
-- **Cores do companheiro** (`pet-fill`, `pet-blush`, `ground`, `mood-happy`, `mood-sad`): ilustração, chão e estados de humor; não são uma segunda cor de ação.
+- **Cores do companheiro:** `pet-fill` e `pet-blush` registram a base e a bochecha do Ursinho em ok/feliz. Cada espécie tem paleta própria em `src/app/pet-sprites.tsx`, com variante triste mais fria; essas paletas pertencem às ilustrações. `ground`, `mood-happy` e `mood-sad` continuam descrevendo chão e selos de humor, sem criar cores de ação.
 
 ### Neutral
 
@@ -254,11 +254,19 @@ Os dias são um `fieldset` com `legend`, sete checkboxes nativos, texto de ajuda
 
 ### Pixel companion and mood
 
-SVG original com grade (16 × 16), células retangulares e `crispEdges`, exibido a (180 × 180px). A expressão muda entre feliz, ok e triste; feliz também ganha bochechas. Há nome acessível no SVG e humor escrito: “Feliz”, “De boa” ou “Triste”. O selo não é interativo. A cena tem altura (230px), reduzida para (200px) no celular.
+O catálogo contém seis espécies e 18 matrizes (32 × 32): `original`/Ursinho, `gato`/Gatinho, `cachorro`/Cachorrinho, `coelho`/Coelhinho, `dragao`/Dragãozinho e `planta`/Brotinho, nessa ordem. IDs, nomes e ordem permanecem estáveis. A grade de 32 se aplica ao catálogo; marca, logomark e assets de 16 permanecem em 16.
+
+Cada matriz usa transparência e uma legenda de nove cores: contorno, base, sombra, luz, detalhe, bochecha, olho, brilho do olho e lágrima. Base, sombra e luz fornecem três tons do corpo. Paletas próprias distinguem as espécies; a variante triste é mais fria, tem postura rebaixada e lágrimas. Olhos têm brilhos de 1–2 pixels, as bochechas são pontuais e a expressão feliz inclui sorriso e coração.
+
+O SVG gera `rect` por corridas horizontais contíguas da mesma cor, com `crispEdges` e `image-rendering: pixelated`, sem suavização. O tamanho padrão é (180 × 180px). Há nome acessível no SVG e humor escrito: “Feliz”, “De boa” ou “Triste”. O selo não é interativo.
+
+O bloco `PET_MOTION_START`/`PET_MOTION_END` de `src/app/globals.css` anima o grupo do corpo: feliz sobe 3px em 2,4s por dois ciclos; ok sobe 2px em 2,4s por dois ciclos; triste desce 2px e escala a 0,98 em 4,8s por um ciclo. A piscada dura 4,8s por um ciclo; todos usam `ease-in-out`. A saudação do app termina em 4,8s. Com `prefers-reduced-motion: reduce`, animação e transformação são desativadas.
+
+`docs/pets-preview.html` reúne 72 amostras a 64/128px sobre fundos claro/escuro. A página é estática, sem CDN, e compartilha o bloco CSS; repetição depende de ativação explícita e pode ser pausada.
 
 ### Daily progress
 
-Barra nativa `progress`, altura (8px), trilha suave e preenchimento verde. Porcentagem e contagem são exibidas em texto, com explicação da virada do dia em São Paulo. Não há movimento ou recompensa animada.
+Barra nativa `progress`, altura (8px), trilha suave e preenchimento verde. Porcentagem e contagem são exibidas em texto, com explicação da virada do dia em São Paulo. A barra não anima; o movimento breve do companheiro segue a regra de pets acima.
 
 ### Skip, streak and points history
 
@@ -280,6 +288,6 @@ Sucesso usa superfície suave e `role="status"`; erro usa tons próprios e `role
 
 ### Don't:
 - **Don't** apresentar esta direção provisória como identidade de marca aprovada.
-- **Don't** acrescentar animações, sombras ou gradientes ao reproduzir a interface atual.
+- **Don't** prolongar a saudação dos pets além de 4,8s no app ou ignorar movimento reduzido; não acrescentar sombras ou gradientes ao reproduzir esta direção.
 - **Don't** suavizar os pixels do companheiro ou transformar o selo de humor em controle.
 - **Don't** substituir rótulos de campos por placeholders ou depender somente de cor para estados.

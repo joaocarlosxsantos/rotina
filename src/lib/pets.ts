@@ -41,12 +41,12 @@ export const PET_CATALOG: Record<PetKind, PetDefinition> = {
   dragao: {
     id: "dragao",
     name: "Dragãozinho",
-    description: "Corajoso e determinado, com uma chama ardente de hábitos.",
+    description: "Asinhas de lavanda, chifres dourados e coragem nas pequenas conquistas.",
   },
   planta: {
     id: "planta",
     name: "Brotinho",
-    description: "Cultiva seus hábitos dia a dia com paciência e carinho.",
+    description: "Uma roseta de folhas num vasinho de barro, crescendo sem pressa com você.",
   },
 };
 

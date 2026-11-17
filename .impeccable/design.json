@@ -313,7 +313,7 @@
         ]
       },
       "pet-fill": {
-        "displayName": "pet-fill",
+        "displayName": "Base do Ursinho (ok/feliz)",
         "role": "secondary",
         "tonalRamp": [
           "oklch(15.00% 0.1106 127.21)",
@@ -327,22 +327,28 @@
         ]
       },
       "pet-blush": {
-        "displayName": "pet-blush",
-        "role": "secondary",
-        "tonalRamp": [
-          "oklch(15.00% 0.1116 36.58)",
-          "oklch(26.43% 0.1116 36.58)",
-          "oklch(37.86% 0.1116 36.58)",
-          "oklch(49.29% 0.1116 36.58)",
-          "oklch(60.71% 0.1116 36.58)",
-          "oklch(72.14% 0.1116 36.58)",
-          "oklch(83.57% 0.1116 36.58)",
-          "oklch(95.00% 0.1116 36.58)"
-        ]
+        "displayName": "Bochecha do Ursinho (ok/feliz)",
+        "role": "secondary"
       }
     },
     "shadows": [],
-    "motion": [],
+    "motion": [
+      { "name": "pet-hop", "value": "2.4s ease-in-out 2", "purpose": "Feliz: corpo sobe 3px; termina em 4,8s." },
+      { "name": "pet-sway", "value": "2.4s ease-in-out 2", "purpose": "Ok: corpo sobe 2px; termina em 4,8s." },
+      { "name": "pet-shrink", "value": "4.8s ease-in-out 1", "purpose": "Triste: corpo desce 2px e escala a 0,98." },
+      { "name": "pet-blink", "value": "4.8s ease-in-out 1", "purpose": "Piscada do grupo de olhos; escala Y mínima 0,12." },
+      { "name": "pet-reduced-motion", "value": "animation: none !important; transform: none !important", "purpose": "Aplicado com prefers-reduced-motion: reduce. Bloco canônico PET_MOTION_START/END em src/app/globals.css; repetição da folha de contato somente por opt-in, com pausa." }
+    ],
+    "petSprites": {
+      "source": "src/app/pet-sprites.tsx",
+      "grid": "32 × 32",
+      "matrices": 18,
+      "catalogOrder": ["original/Ursinho", "gato/Gatinho", "cachorro/Cachorrinho", "coelho/Coelhinho", "dragao/Dragãozinho", "planta/Brotinho"],
+      "palette": "Nove cores por paleta: contorno, base, sombra, luz, detalhe, bochecha, olho, brilho e lágrima; transparência sem geometria. Base/sombra/luz são três tons do corpo. Cada espécie tem paleta própria e variante triste mais fria, definida na fonte sem criar paleta de UI.",
+      "expression": "Brilhos dos olhos de 1–2px e bochechas pontuais; triste com postura rebaixada e lágrimas; feliz com sorriso e coração.",
+      "rendering": "SVG com rect por corridas horizontais de cor; crispEdges e image-rendering: pixelated. Tamanho padrão 180px. Marca, logomark e assets de 16 permanecem em 16.",
+      "preview": "docs/pets-preview.html: 72 amostras a 64/128px, fundos claro/escuro, estática sem CDN; movimento repetido opt-in e pausável."
+    },
     "breakpoints": [
       {
         "name": "lateral-compacta",
@@ -436,13 +442,13 @@
   ],
   "narrative": {
     "northStar": "Caderno de hábitos com companheiro pixel",
-    "overview": "Esta é uma descrição provisória extraída da interface implementada, não uma identidade de marca aprovada. O fundo papel, o texto verde escuro e os títulos serifados dão à tela o caráter de um caderno de uso diário. Listas separadas por linhas e formulários próximos das atividades mantêm a leitura direta.\n\nO pet pixel é o elemento ilustrado característico: sua expressão acompanha o estado do dia e vem acompanhada de texto. A interface atual é estática, sem animações ou transições. Público específico, identidade de marca e linguagem visual de futuras telas continuam em aberto; esta documentação registra o código atual.",
+    "overview": "Esta é uma descrição provisória extraída da interface implementada, não uma identidade de marca aprovada. O fundo papel, o texto verde escuro e os títulos serifados dão à tela o caráter de um caderno de uso diário. Listas separadas por linhas e formulários próximos das atividades mantêm a leitura direta.\n\nO pet pixel é o elemento ilustrado característico: sua expressão acompanha o estado do dia e vem acompanhada de texto. Os pets têm uma saudação breve que termina em 4,8s e respeita a preferência de movimento reduzido. Público específico, identidade de marca e linguagem visual de futuras telas continuam em aberto; esta documentação registra o código atual.",
     "keyCharacteristics": [
       "Papel claro e verde escuro, com superfícies verde suave.",
       "Títulos serifados e controles sem serifa, usando fontes locais.",
       "Rotinas em listas com divisórias e formulários no contexto.",
       "Companheiro pixel original com três expressões e humor escrito.",
-      "Estados de formulário legíveis, foco visível e ausência de movimento."
+      "Estados de formulário legíveis, foco visível e movimento breve dos pets com alternativa estática."
     ],
     "rules": [],
     "dos": [
@@ -453,7 +459,7 @@
     ],
     "donts": [
       "**Don't** apresentar esta direção provisória como identidade de marca aprovada.",
-      "**Don't** acrescentar animações, sombras ou gradientes ao reproduzir a interface atual.",
+      "**Don't** prolongar a saudação dos pets além de 4,8s no app ou ignorar movimento reduzido; não acrescentar sombras ou gradientes ao reproduzir esta direção.",
       "**Don't** suavizar os pixels do companheiro ou transformar o selo de humor em controle.",
       "**Don't** substituir rótulos de campos por placeholders ou depender somente de cor para estados."
     ]

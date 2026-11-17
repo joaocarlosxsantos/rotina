@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import React from "react";
+import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   PET_CATALOG,
@@ -25,6 +26,21 @@ const OTHER_USER = {
   name: "Usuário B",
 };
 
+test("contact sheet contém os 18 sprites nos dois tamanhos e dois fundos, sem rede ou scripts", () => {
+  const preview = readFileSync("docs/pets-preview.html", "utf8");
+  assert.equal((preview.match(/role="img"/g) ?? []).length, 72);
+  assert.equal((preview.match(/width="64"/g) ?? []).length, 36);
+  assert.equal((preview.match(/width="128"/g) ?? []).length, 36);
+  assert.equal((preview.match(/class="board light"/g) ?? []).length, 6);
+  assert.equal((preview.match(/class="board dark"/g) ?? []).length, 6);
+  assert.doesNotMatch(preview, /<script|https?:\/\//);
+  assert.ok(preview.includes('id="animate"'));
+  assert.ok(preview.includes("prefers-reduced-motion: reduce"));
+  for (const kind of PET_KINDS) for (const mood of ["sad", "ok", "happy"] as const) {
+    assert.ok(preview.includes(renderToStaticMarkup(React.createElement(PetSprite, { kind, mood, size: 64, label: `${PET_CATALOG[kind].name} ${{ sad: "triste", ok: "de boa", happy: "feliz" }[mood]}` }))));
+  }
+});
+
 test("Catálogo de pets contém 6 companheiros e cada um possui 3 humores com SVG 32x32 válido", () => {
   assert.equal(PET_KINDS.length, 6, "Devem existir exatamente 6 companheiros no catálogo");
   assert.deepEqual(
@@ -38,6 +54,7 @@ test("Catálogo de pets contém 6 companheiros e cada um possui 3 humores com SV
     const def = PET_CATALOG[kind];
     assert.ok(def, `Companheiro ${kind} deve ter definição`);
     assert.equal(def.id, kind);
+    assert.equal(def.name, ["Ursinho", "Gatinho", "Cachorrinho", "Coelhinho", "Dragãozinho", "Brotinho"][PET_KINDS.indexOf(kind)]);
     assert.ok(def.name.length > 0, `Companheiro ${kind} deve ter nome pt-BR`);
     assert.ok(def.description.length > 0, `Companheiro ${kind} deve ter descrição`);
 
@@ -45,7 +62,7 @@ test("Catálogo de pets contém 6 companheiros e cada um possui 3 humores com SV
     assert.ok(spriteDef, `Companheiro ${kind} deve ter SPRITES definido`);
     assert.deepEqual(Object.keys(spriteDef.rows), ["sad", "ok", "happy"]);
     for (const palette of [spriteDef.colors, spriteDef.sadColors]) {
-      assert.ok(Object.keys(palette).length <= 10);
+      assert.ok(Object.keys(palette).length >= 6 && Object.keys(palette).length <= 10);
       assert.ok(Object.values(palette).every(color => /^#[0-9a-f]{6}$/i.test(color) && color !== "#000000"));
     }
     assert.notDeepEqual(spriteDef.colors, spriteDef.sadColors);
@@ -57,10 +74,19 @@ test("Catálogo de pets contém 6 companheiros e cada um possui 3 humores com SV
       assert.ok([...rows.join("")].every(cell => cell === "." || cell in spriteDef.colors));
       assert.ok(rows.some(row => row.includes("o")), "Contorno presente");
       assert.ok(rows.some(row => row.includes("e")), "Olhos presentes");
+      assert.ok(rows.some(row => row.includes("h")), "Brilho dos olhos presente");
+      if (mood === "sad") assert.ok(rows.some(row => row.includes("t")), "Lágrimas presentes");
       const runs = horizontalRuns(rows);
       const pixels = rows.join("").replaceAll(".", "").length;
       assert.ok(runs.length < pixels, "Corridas devem reduzir os rects");
       assert.equal(runs.reduce((sum, run) => sum + run.width, 0), pixels);
+      const reconstructed = Array.from({ length: 32 }, () => Array<string>(32).fill("."));
+      for (const run of runs) {
+        assert.ok(run.width > 0 && run.x + run.width <= 32);
+        for (let x = run.x; x < run.x + run.width; x++) reconstructed[run.y][x] = run.key;
+        assert.notEqual(rows[run.y][run.x + run.width], run.key, "Corrida deve ser máxima");
+      }
+      assert.deepEqual(reconstructed.map(row => row.join("")), rows, "Compressão deve preservar cada pixel");
       const html = renderToStaticMarkup(
         React.createElement(PetSprite, {
           kind,
