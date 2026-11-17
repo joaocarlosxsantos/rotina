@@ -99,7 +99,7 @@ export const userSettings = pgTable(
   (table) => [
     check(
       "user_settings_pet_kind_valid",
-      sql`${table.petKind} in ('original', 'gato', 'cachorro', 'coelho', 'dragao', 'planta')`,
+      sql`${table.petKind} in ('original', 'gato', 'cachorro', 'coelho', 'dragao', 'planta', 'hamster', 'raposa', 'panda', 'pinguim', 'pintinho', 'coruja')`,
     ),
   ],
 );

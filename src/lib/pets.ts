@@ -5,6 +5,12 @@ export const PET_KINDS = [
   "coelho",
   "dragao",
   "planta",
+  "hamster",
+  "raposa",
+  "panda",
+  "pinguim",
+  "pintinho",
+  "coruja",
 ] as const;
 
 export type PetKind = (typeof PET_KINDS)[number];
@@ -48,6 +54,12 @@ export const PET_CATALOG: Record<PetKind, PetDefinition> = {
     name: "Brotinho",
     description: "Uma roseta de folhas num vasinho de barro, crescendo sem pressa com você.",
   },
+  hamster: { id: "hamster", name: "Hamster", description: "Bochechas de pãozinho e patinhas cheias de carinho." },
+  raposa: { id: "raposa", name: "Raposinha", description: "Uma cauda fofinha para aquecer suas pequenas conquistas." },
+  panda: { id: "panda", name: "Pandinha", description: "Abraços macios e uma pausa gostosa entre as tarefas." },
+  pinguim: { id: "pinguim", name: "Pinguinzinho", description: "Passinhos juntinhos para acompanhar o seu dia." },
+  pintinho: { id: "pintinho", name: "Pintinho", description: "Um pinguinho de sol torcendo por você." },
+  coruja: { id: "coruja", name: "Corujinha", description: "Olhinhos atentos e companhia nas horas tranquilas." },
 };
 
 export function isPetKind(value: unknown): value is PetKind {
