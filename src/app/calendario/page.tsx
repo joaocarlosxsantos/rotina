@@ -43,6 +43,31 @@ function formatEventTime(isoString: string, isAllDay: boolean): string {
   }
 }
 
+function formatDayHeader(dateStr: string, todayStr: string, tomorrowStr: string): string {
+  try {
+    const [y, m, d] = dateStr.split("-").map(Number);
+    const dateObj = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+    const formatted = new Intl.DateTimeFormat("pt-BR", {
+      timeZone: TIME_ZONE,
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    }).format(dateObj);
+    const simplified = formatted.replace("-feira", "");
+    const capitalized = simplified.charAt(0).toUpperCase() + simplified.slice(1);
+
+    if (dateStr === todayStr) {
+      return `Hoje — ${capitalized}`;
+    }
+    if (dateStr === tomorrowStr) {
+      return `Amanhã — ${capitalized}`;
+    }
+    return capitalized;
+  } catch {
+    return dateStr;
+  }
+}
+
 export default async function CalendarPage({
   searchParams,
 }: {
@@ -54,7 +79,17 @@ export default async function CalendarPage({
   const now = new Date();
 
   const feed = await getCalendarFeed(db, user, now);
-  const { dateStr } = getTodayBoundsSP(now);
+  const todayStr = feed.window.startDateStr;
+  const tomorrowStr = feed.window.dayKeys[1] ?? "";
+
+  const eventsByDay = new Map<string, typeof feed.events>();
+  for (const event of feed.events) {
+    const list = eventsByDay.get(event.startDateSP) ?? [];
+    list.push(event);
+    eventsByDay.set(event.startDateSP, list);
+  }
+
+  const daysWithEvents = feed.window.dayKeys.filter((k) => (eventsByDay.get(k)?.length ?? 0) > 0);
 
   const formattedDate = new Intl.DateTimeFormat("pt-BR", {
     timeZone: TIME_ZONE,
@@ -82,7 +117,7 @@ export default async function CalendarPage({
             <h1>Seus compromissos e rotinas em um só lugar.</h1>
             <p>
               Conecte múltiplas contas do Google (modo somente leitura) para
-              acompanhar os eventos de hoje sem sair do seu caderno de hábitos.
+              acompanhar seus eventos dos próximos 7 dias sem sair do seu caderno de hábitos.
             </p>
           </div>
         </div>
@@ -112,12 +147,12 @@ export default async function CalendarPage({
           </section>
         ) : (
           <div className="calendar-workspace">
-            {/* Coluna Principal: Eventos do Dia */}
+            {/* Coluna Principal: Eventos dos Próximos 7 Dias Agrupados */}
             <section className="calendar-events-section" aria-labelledby="events-title">
               <div className="section-title">
                 <div>
-                  <h2 id="events-title">Agenda de hoje</h2>
-                  <span className="calendar-date-label">{formattedDate}</span>
+                  <h2 id="events-title">Agenda dos próximos 7 dias</h2>
+                  <span className="calendar-date-label">Hoje é {formattedDate}</span>
                 </div>
                 <span className="events-counter">
                   {feed.events.length} {feed.events.length === 1 ? "evento" : "eventos"}
@@ -129,7 +164,7 @@ export default async function CalendarPage({
                   <h3>Nenhuma conta Google conectada.</h3>
                   <p>
                     Conecte suas contas de trabalho, estudos ou pessoal para visualizar
-                    todos os seus eventos do dia organizados em ordem cronológica.
+                    todos os seus eventos dos próximos 7 dias organizados por dia e horário.
                   </p>
                   <a href="/api/calendar/connect" className="btn-connect-primary">
                     Conectar primeira conta Google
@@ -137,53 +172,95 @@ export default async function CalendarPage({
                 </div>
               ) : feed.events.length === 0 ? (
                 <div className="empty calendar-empty">
-                  <h3>Nenhum evento agendado para hoje.</h3>
+                  <h3>Nenhum evento agendado para os próximos 7 dias.</h3>
                   <p>
-                    Seu dia está livre nas contas conectadas. Ótimo momento para
+                    Seus próximos 7 dias estão livres nas contas conectadas. Ótimo momento para
                     avançar nas suas rotinas e cuidar do seu pet!
                   </p>
                 </div>
               ) : (
-                <ol className="calendar-events-list">
-                  {feed.events.map((event) => {
-                    const startFormatted = formatEventTime(event.startTime, event.isAllDay);
-                    const endFormatted = event.endTime && !event.isAllDay
-                      ? formatEventTime(event.endTime, false)
-                      : null;
-                    const safeLink = event.htmlLink && isValidCalendarHtmlLink(event.htmlLink) ? event.htmlLink : null;
+                <div className="calendar-agenda-groups">
+                  {daysWithEvents.map((dayKey) => {
+                    const dayEvents = eventsByDay.get(dayKey) ?? [];
+                    const dayHeaderLabel = formatDayHeader(dayKey, todayStr, tomorrowStr);
 
                     return (
-                      <li key={event.id} className="calendar-event-card">
-                        <div className="event-time-col">
-                          <strong className="event-start-time">{startFormatted}</strong>
-                          {endFormatted && (
-                            <span className="event-end-time">até {endFormatted}</span>
-                          )}
+                      <section
+                        key={dayKey}
+                        className="calendar-day-group"
+                        aria-labelledby={`day-title-${dayKey}`}
+                      >
+                        <div className="calendar-day-header">
+                          <h3 id={`day-title-${dayKey}`} className="calendar-day-title">
+                            {dayHeaderLabel}
+                          </h3>
+                          <span className="calendar-day-count">
+                            {dayEvents.length} {dayEvents.length === 1 ? "evento" : "eventos"}
+                          </span>
                         </div>
 
-                        <div className="event-info-col">
-                          <h3 className="event-title">{event.title}</h3>
-                          <div className="event-meta">
-                            <span className="event-account-badge" title={`Conta: ${event.accountEmail}`}>
-                              {event.accountEmail}
-                            </span>
-                            {safeLink && (
-                              <a
-                                href={safeLink}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="event-link"
-                                aria-label={`Ver evento "${event.title}" no Google Agenda`}
+                        <ol className="calendar-events-list">
+                          {dayEvents.map((event) => {
+                            const startFormatted = formatEventTime(event.startTime, event.isAllDay);
+                            const endFormatted =
+                              event.endTime && !event.isAllDay
+                                ? formatEventTime(event.endTime, false)
+                                : null;
+                            const safeLink =
+                              event.htmlLink && isValidCalendarHtmlLink(event.htmlLink)
+                                ? event.htmlLink
+                                : null;
+
+                            return (
+                              <li
+                                key={event.id}
+                                className={`calendar-event-card ${
+                                  event.isSpecialCalendar ? "event-special-card" : ""
+                                }`}
                               >
-                                Ver no Google Agenda ↗
-                              </a>
-                            )}
-                          </div>
-                        </div>
-                      </li>
+                                <div className="event-time-col">
+                                  <strong className="event-start-time">{startFormatted}</strong>
+                                  {endFormatted && (
+                                    <span className="event-end-time">até {endFormatted}</span>
+                                  )}
+                                </div>
+
+                                <div className="event-info-col">
+                                  <h4 className="event-title">{event.title}</h4>
+                                  <div className="event-meta">
+                                    <span
+                                      className="event-calendar-badge"
+                                      title={`Calendário: ${event.calendarName}`}
+                                    >
+                                      📅 {event.calendarName}
+                                    </span>
+                                    <span
+                                      className="event-account-badge"
+                                      title={`Conta: ${event.accountEmail}`}
+                                    >
+                                      {event.accountEmail}
+                                    </span>
+                                    {safeLink && (
+                                      <a
+                                        href={safeLink}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="event-link"
+                                        aria-label={`Ver evento "${event.title}" no Google Agenda`}
+                                      >
+                                        Ver no Google Agenda ↗
+                                      </a>
+                                    )}
+                                  </div>
+                                </div>
+                              </li>
+                            );
+                          })}
+                        </ol>
+                      </section>
                     );
                   })}
-                </ol>
+                </div>
               )}
             </section>
 
