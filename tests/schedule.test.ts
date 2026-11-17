@@ -467,5 +467,5 @@ test("script de migration rejeita produção e URL remota antes de abrir o banco
     },
   );
   assert.notEqual(remote.status, 0);
-  assert.match(remote.stderr, /apenas SQLite local/);
+  assert.match(remote.stderr, /Migration remota bloqueada/);
 });

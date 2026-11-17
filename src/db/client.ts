@@ -8,7 +8,10 @@ const DEFAULT_DATABASE_URL = "file:./data/rotina.db";
 
 function isWithin(root: string, target: string) {
   const rel = relative(root, target);
-  return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
+  return (
+    rel === "" ||
+    (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel))
+  );
 }
 
 function realpathOfExistingAncestor(target: string) {
@@ -61,8 +64,10 @@ export function localDatabaseUrl(
   if (filePath.split(/[\\/]+/).includes(".."))
     throw new Error("DATABASE_URL invalida: '..' nao e permitido no caminho.");
 
-  const root = resolve(projectRoot);
-  const target = isAbsolute(filePath) ? resolve(filePath) : resolve(root, filePath);
+  const root = resolve(/* turbopackIgnore: true */ projectRoot);
+  const target = isAbsolute(filePath)
+    ? resolve(filePath)
+    : resolve(root, filePath);
   if (relative(root, target) === "" || !isWithin(root, target))
     throw new Error(
       "DATABASE_URL invalida: o banco deve ficar dentro do diretorio do projeto.",
@@ -71,7 +76,7 @@ export function localDatabaseUrl(
   let realRoot: string;
   let realAncestor: string;
   try {
-    realRoot = realpathSync(root);
+    realRoot = realpathSync(/* turbopackIgnore: true */ root);
     realAncestor = realpathOfExistingAncestor(target);
   } catch {
     throw new Error(
@@ -85,13 +90,95 @@ export function localDatabaseUrl(
   return raw;
 }
 
-export function createDatabase(url: string) {
-  const client = createClient({ url });
+export type DatabaseEnvironment = Readonly<Record<string, string | undefined>>;
+export type DatabaseConfiguration =
+  | { kind: "local"; url: string; authToken?: never }
+  | { kind: "remote"; url: string; authToken: string };
+
+export function databaseConfiguration(
+  env: DatabaseEnvironment = process.env,
+  projectRoot = process.cwd(),
+): DatabaseConfiguration {
+  const raw = env.DATABASE_URL?.trim() ?? "";
+  if (raw.startsWith("libsql://")) {
+    if (env.VERCEL === undefined && env.NODE_ENV !== "production") {
+      throw new Error(
+        "Banco remoto permitido apenas na Vercel ou em NODE_ENV=production; desenvolvimento/teste usam apenas SQLite local.",
+      );
+    }
+    let parsed: URL;
+    try {
+      parsed = new URL(raw);
+    } catch {
+      throw new Error(
+        "DATABASE_URL remota inválida; use libsql:// com um host válido.",
+      );
+    }
+    if (
+      !parsed.hostname ||
+      parsed.username ||
+      parsed.password ||
+      parsed.search ||
+      parsed.hash ||
+      (parsed.pathname !== "" && parsed.pathname !== "/") ||
+      /[\s\u0000-\u001f\u007f]/.test(raw)
+    ) {
+      throw new Error(
+        "DATABASE_URL remota inválida; credenciais, parâmetros e caminhos não são permitidos na URL.",
+      );
+    }
+    const authToken = env.DATABASE_AUTH_TOKEN?.trim();
+    if (!authToken)
+      throw new Error("DATABASE_AUTH_TOKEN é obrigatório para o banco remoto.");
+    return { kind: "remote", url: raw, authToken };
+  }
+  if (env.VERCEL !== undefined)
+    throw new Error(
+      "Na Vercel, configure DATABASE_URL libsql e DATABASE_AUTH_TOKEN; não use SQLite em arquivo.",
+    );
+  return { kind: "local", url: localDatabaseUrl(raw, projectRoot) };
+}
+
+export function createDatabase(
+  url: string,
+  authToken?: string,
+  factory: typeof createClient = createClient,
+  env: DatabaseEnvironment = process.env,
+) {
+  // Fixtures locais podem usar memória; nenhum caminho remoto ignora a política.
+  const config = url.startsWith("file:")
+    ? { url, authToken: undefined }
+    : databaseConfiguration({
+        ...env,
+        DATABASE_URL: url,
+        DATABASE_AUTH_TOKEN: authToken ?? env.DATABASE_AUTH_TOKEN,
+      });
+  const client = factory({
+    url: config.url,
+    ...(config.authToken ? { authToken: config.authToken } : {}),
+  });
   return { client, db: drizzle(client, { schema }) };
+}
+
+export function configuredDatabase(
+  env: DatabaseEnvironment = process.env,
+  projectRoot = process.cwd(),
+  factory: typeof createClient = createClient,
+) {
+  const config = databaseConfiguration(env, projectRoot);
+  try {
+    return createDatabase(config.url, config.authToken, factory, env);
+  } catch (error) {
+    if (config.kind === "remote")
+      throw new Error(
+        "Falha ao configurar o banco remoto; dados de conexão omitidos.",
+      );
+    throw error;
+  }
 }
 
 let connection: ReturnType<typeof createDatabase> | undefined;
 export function getDatabase() {
-  connection ??= createDatabase(localDatabaseUrl());
+  connection ??= configuredDatabase();
   return connection.db;
 }

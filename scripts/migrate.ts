@@ -2,7 +2,8 @@ import { mkdir, readdir, readFile, unlink } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { migrate } from "drizzle-orm/libsql/migrator";
-import { createDatabase, localDatabaseUrl } from "../src/db/client";
+import { createDatabase } from "../src/db/client";
+import { migrationPlan } from "../src/db/migration-policy";
 
 const MIGRATIONS_FOLDER = "./drizzle";
 const MAX_BACKUPS = 5;
@@ -36,20 +37,44 @@ async function pruneBackups(directory: string, prefix: string) {
 }
 
 async function main() {
-  // NODE_ENV nao protege DATABASE_URL: fora de producao, um caminho valido
-  // dentro do projeto continua aceito; a guarda real e a de localizacao.
-  if (process.env.NODE_ENV === "production")
-    throw new Error("Migration de producao bloqueada nesta fase.");
-  let url: string;
+  let plan: ReturnType<typeof migrationPlan>;
   try {
-    url = localDatabaseUrl();
+    plan = migrationPlan();
   } catch (error) {
     throw new Error(`Migration recusada: ${(error as Error).message}`);
   }
+  if (plan.kind === "skip") {
+    console.log("Migration ignorada: este build não é de produção.");
+    return;
+  }
   const migrationsFolder = resolve(MIGRATIONS_FOLDER);
-  const databasePath = resolve(url.slice("file:".length));
+  if (plan.kind === "remote") {
+    // libsql:// usa batch transacional remoto do cliente; sem VACUUM/backup local.
+    // A tabela de controle é criada fora do batch: ver riscos no README.
+    try {
+      const { client, db } = createDatabase(
+        plan.url,
+        plan.authToken,
+        undefined,
+        { ...process.env, NODE_ENV: "production" },
+      );
+      try {
+        await migrate(db, { migrationsFolder });
+        console.log("Migrations remotas concluídas.");
+      } finally {
+        client.close();
+      }
+    } catch {
+      // Exceções do driver podem conter URL/credenciais. Não registrar causa nem stack.
+      throw new Error(
+        "Migration remota falhou; verifique conectividade, permissões e estado do journal antes de repetir. Dados de conexão foram omitidos.",
+      );
+    }
+    return;
+  }
+  const databasePath = resolve(plan.url.slice("file:".length));
   await mkdir(dirname(databasePath), { recursive: true });
-  const { client, db } = createDatabase(url);
+  const { client, db } = createDatabase(plan.url);
   try {
     // O migrator libsql envia tudo por client.migrate(): no driver sqlite3
     // local isso vira BEGIN/COMMIT com ROLLBACK se alguma statement falhar.

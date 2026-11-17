@@ -151,7 +151,7 @@ test("script de migration recusa producao e URL fora do projeto sem tocar no ban
       DATABASE_URL: "libsql://invalid.example",
     });
     assert.notEqual(remote.status, 0);
-    assert.match(remote.stderr, /apenas SQLite local/);
+    assert.match(remote.stderr, /Migration remota bloqueada/);
 
     const escaped = runMigration({
       NODE_ENV: "test",
