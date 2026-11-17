@@ -1,0 +1,430 @@
+﻿{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-17T12:20:38.921Z",
+  "title": "Design System: Rotina Pet",
+  "extensions": {
+    "colorMeta": {
+      "paper": {
+        "displayName": "paper",
+        "role": "neutral",
+        "tonalRamp": [
+          "oklch(15.00% 0.0067 97.35)",
+          "oklch(26.43% 0.0067 97.35)",
+          "oklch(37.86% 0.0067 97.35)",
+          "oklch(49.29% 0.0067 97.35)",
+          "oklch(60.71% 0.0067 97.35)",
+          "oklch(72.14% 0.0067 97.35)",
+          "oklch(83.57% 0.0067 97.35)",
+          "oklch(95.00% 0.0067 97.35)"
+        ]
+      },
+      "ink": {
+        "displayName": "ink",
+        "role": "primary",
+        "tonalRamp": [
+          "oklch(15.00% 0.0422 166.23)",
+          "oklch(26.43% 0.0422 166.23)",
+          "oklch(37.86% 0.0422 166.23)",
+          "oklch(49.29% 0.0422 166.23)",
+          "oklch(60.71% 0.0422 166.23)",
+          "oklch(72.14% 0.0422 166.23)",
+          "oklch(83.57% 0.0422 166.23)",
+          "oklch(95.00% 0.0422 166.23)"
+        ]
+      },
+      "muted": {
+        "displayName": "muted",
+        "role": "neutral",
+        "tonalRamp": [
+          "oklch(15.00% 0.0269 156.93)",
+          "oklch(26.43% 0.0269 156.93)",
+          "oklch(37.86% 0.0269 156.93)",
+          "oklch(49.29% 0.0269 156.93)",
+          "oklch(60.71% 0.0269 156.93)",
+          "oklch(72.14% 0.0269 156.93)",
+          "oklch(83.57% 0.0269 156.93)",
+          "oklch(95.00% 0.0269 156.93)"
+        ]
+      },
+      "line": {
+        "displayName": "line",
+        "role": "neutral",
+        "tonalRamp": [
+          "oklch(15.00% 0.0177 128.70)",
+          "oklch(26.43% 0.0177 128.70)",
+          "oklch(37.86% 0.0177 128.70)",
+          "oklch(49.29% 0.0177 128.70)",
+          "oklch(60.71% 0.0177 128.70)",
+          "oklch(72.14% 0.0177 128.70)",
+          "oklch(83.57% 0.0177 128.70)",
+          "oklch(95.00% 0.0177 128.70)"
+        ]
+      },
+      "green": {
+        "displayName": "green",
+        "role": "primary",
+        "tonalRamp": [
+          "oklch(15.00% 0.0674 155.98)",
+          "oklch(26.43% 0.0674 155.98)",
+          "oklch(37.86% 0.0674 155.98)",
+          "oklch(49.29% 0.0674 155.98)",
+          "oklch(60.71% 0.0674 155.98)",
+          "oklch(72.14% 0.0674 155.98)",
+          "oklch(83.57% 0.0674 155.98)",
+          "oklch(95.00% 0.0674 155.98)"
+        ]
+      },
+      "pale": {
+        "displayName": "pale",
+        "role": "primary",
+        "tonalRamp": [
+          "oklch(15.00% 0.0193 122.84)",
+          "oklch(26.43% 0.0193 122.84)",
+          "oklch(37.86% 0.0193 122.84)",
+          "oklch(49.29% 0.0193 122.84)",
+          "oklch(60.71% 0.0193 122.84)",
+          "oklch(72.14% 0.0193 122.84)",
+          "oklch(83.57% 0.0193 122.84)",
+          "oklch(95.00% 0.0193 122.84)"
+        ]
+      },
+      "orange": {
+        "displayName": "orange",
+        "role": "secondary",
+        "tonalRamp": [
+          "oklch(15.00% 0.1342 36.83)",
+          "oklch(26.43% 0.1342 36.83)",
+          "oklch(37.86% 0.1342 36.83)",
+          "oklch(49.29% 0.1342 36.83)",
+          "oklch(60.71% 0.1342 36.83)",
+          "oklch(72.14% 0.1342 36.83)",
+          "oklch(83.57% 0.1342 36.83)",
+          "oklch(95.00% 0.1342 36.83)"
+        ]
+      },
+      "green-hover": {
+        "displayName": "green-hover",
+        "role": "primary",
+        "tonalRamp": [
+          "oklch(15.00% 0.0616 153.43)",
+          "oklch(26.43% 0.0616 153.43)",
+          "oklch(37.86% 0.0616 153.43)",
+          "oklch(49.29% 0.0616 153.43)",
+          "oklch(60.71% 0.0616 153.43)",
+          "oklch(72.14% 0.0616 153.43)",
+          "oklch(83.57% 0.0616 153.43)",
+          "oklch(95.00% 0.0616 153.43)"
+        ]
+      },
+      "button-text": {
+        "displayName": "button-text",
+        "role": "neutral",
+        "tonalRamp": [
+          "oklch(15.00% 0.0000 89.88)",
+          "oklch(26.43% 0.0000 89.88)",
+          "oklch(37.86% 0.0000 89.88)",
+          "oklch(49.29% 0.0000 89.88)",
+          "oklch(60.71% 0.0000 89.88)",
+          "oklch(72.14% 0.0000 89.88)",
+          "oklch(83.57% 0.0000 89.88)",
+          "oklch(95.00% 0.0000 89.88)"
+        ]
+      },
+      "field-border": {
+        "displayName": "field-border",
+        "role": "neutral",
+        "tonalRamp": [
+          "oklch(15.00% 0.0246 145.27)",
+          "oklch(26.43% 0.0246 145.27)",
+          "oklch(37.86% 0.0246 145.27)",
+          "oklch(49.29% 0.0246 145.27)",
+          "oklch(60.71% 0.0246 145.27)",
+          "oklch(72.14% 0.0246 145.27)",
+          "oklch(83.57% 0.0246 145.27)",
+          "oklch(95.00% 0.0246 145.27)"
+        ]
+      },
+      "field-surface": {
+        "displayName": "field-surface",
+        "role": "neutral",
+        "tonalRamp": [
+          "oklch(15.00% 0.0041 91.45)",
+          "oklch(26.43% 0.0041 91.45)",
+          "oklch(37.86% 0.0041 91.45)",
+          "oklch(49.29% 0.0041 91.45)",
+          "oklch(60.71% 0.0041 91.45)",
+          "oklch(72.14% 0.0041 91.45)",
+          "oklch(83.57% 0.0041 91.45)",
+          "oklch(95.00% 0.0041 91.45)"
+        ]
+      },
+      "placeholder": {
+        "displayName": "placeholder",
+        "role": "neutral",
+        "tonalRamp": [
+          "oklch(15.00% 0.0253 138.99)",
+          "oklch(26.43% 0.0253 138.99)",
+          "oklch(37.86% 0.0253 138.99)",
+          "oklch(49.29% 0.0253 138.99)",
+          "oklch(60.71% 0.0253 138.99)",
+          "oklch(72.14% 0.0253 138.99)",
+          "oklch(83.57% 0.0253 138.99)",
+          "oklch(95.00% 0.0253 138.99)"
+        ]
+      },
+      "invalid": {
+        "displayName": "invalid",
+        "role": "secondary",
+        "tonalRamp": [
+          "oklch(15.00% 0.1416 32.48)",
+          "oklch(26.43% 0.1416 32.48)",
+          "oklch(37.86% 0.1416 32.48)",
+          "oklch(49.29% 0.1416 32.48)",
+          "oklch(60.71% 0.1416 32.48)",
+          "oklch(72.14% 0.1416 32.48)",
+          "oklch(83.57% 0.1416 32.48)",
+          "oklch(95.00% 0.1416 32.48)"
+        ]
+      },
+      "selection": {
+        "displayName": "selection",
+        "role": "neutral",
+        "tonalRamp": [
+          "oklch(15.00% 0.0596 124.19)",
+          "oklch(26.43% 0.0596 124.19)",
+          "oklch(37.86% 0.0596 124.19)",
+          "oklch(49.29% 0.0596 124.19)",
+          "oklch(60.71% 0.0596 124.19)",
+          "oklch(72.14% 0.0596 124.19)",
+          "oklch(83.57% 0.0596 124.19)",
+          "oklch(95.00% 0.0596 124.19)"
+        ]
+      },
+      "activity-divider": {
+        "displayName": "activity-divider",
+        "role": "neutral",
+        "tonalRamp": [
+          "oklch(15.00% 0.0154 123.06)",
+          "oklch(26.43% 0.0154 123.06)",
+          "oklch(37.86% 0.0154 123.06)",
+          "oklch(49.29% 0.0154 123.06)",
+          "oklch(60.71% 0.0154 123.06)",
+          "oklch(72.14% 0.0154 123.06)",
+          "oklch(83.57% 0.0154 123.06)",
+          "oklch(95.00% 0.0154 123.06)"
+        ]
+      },
+      "mood-border": {
+        "displayName": "mood-border",
+        "role": "neutral",
+        "tonalRamp": [
+          "oklch(15.00% 0.0490 132.25)",
+          "oklch(26.43% 0.0490 132.25)",
+          "oklch(37.86% 0.0490 132.25)",
+          "oklch(49.29% 0.0490 132.25)",
+          "oklch(60.71% 0.0490 132.25)",
+          "oklch(72.14% 0.0490 132.25)",
+          "oklch(83.57% 0.0490 132.25)",
+          "oklch(95.00% 0.0490 132.25)"
+        ]
+      },
+      "mood-sad": {
+        "displayName": "mood-sad",
+        "role": "secondary",
+        "tonalRamp": [
+          "oklch(15.00% 0.0307 76.96)",
+          "oklch(26.43% 0.0307 76.96)",
+          "oklch(37.86% 0.0307 76.96)",
+          "oklch(49.29% 0.0307 76.96)",
+          "oklch(60.71% 0.0307 76.96)",
+          "oklch(72.14% 0.0307 76.96)",
+          "oklch(83.57% 0.0307 76.96)",
+          "oklch(95.00% 0.0307 76.96)"
+        ]
+      },
+      "mood-happy": {
+        "displayName": "mood-happy",
+        "role": "secondary",
+        "tonalRamp": [
+          "oklch(15.00% 0.0636 127.16)",
+          "oklch(26.43% 0.0636 127.16)",
+          "oklch(37.86% 0.0636 127.16)",
+          "oklch(49.29% 0.0636 127.16)",
+          "oklch(60.71% 0.0636 127.16)",
+          "oklch(72.14% 0.0636 127.16)",
+          "oklch(83.57% 0.0636 127.16)",
+          "oklch(95.00% 0.0636 127.16)"
+        ]
+      },
+      "ground": {
+        "displayName": "ground",
+        "role": "secondary",
+        "tonalRamp": [
+          "oklch(15.00% 0.0559 125.77)",
+          "oklch(26.43% 0.0559 125.77)",
+          "oklch(37.86% 0.0559 125.77)",
+          "oklch(49.29% 0.0559 125.77)",
+          "oklch(60.71% 0.0559 125.77)",
+          "oklch(72.14% 0.0559 125.77)",
+          "oklch(83.57% 0.0559 125.77)",
+          "oklch(95.00% 0.0559 125.77)"
+        ]
+      },
+      "progress-track": {
+        "displayName": "progress-track",
+        "role": "neutral",
+        "tonalRamp": [
+          "oklch(15.00% 0.0224 123.66)",
+          "oklch(26.43% 0.0224 123.66)",
+          "oklch(37.86% 0.0224 123.66)",
+          "oklch(49.29% 0.0224 123.66)",
+          "oklch(60.71% 0.0224 123.66)",
+          "oklch(72.14% 0.0224 123.66)",
+          "oklch(83.57% 0.0224 123.66)",
+          "oklch(95.00% 0.0224 123.66)"
+        ]
+      },
+      "error-surface": {
+        "displayName": "error-surface",
+        "role": "secondary",
+        "tonalRamp": [
+          "oklch(15.00% 0.0258 48.43)",
+          "oklch(26.43% 0.0258 48.43)",
+          "oklch(37.86% 0.0258 48.43)",
+          "oklch(49.29% 0.0258 48.43)",
+          "oklch(60.71% 0.0258 48.43)",
+          "oklch(72.14% 0.0258 48.43)",
+          "oklch(83.57% 0.0258 48.43)",
+          "oklch(95.00% 0.0258 48.43)"
+        ]
+      },
+      "error-text": {
+        "displayName": "error-text",
+        "role": "secondary",
+        "tonalRamp": [
+          "oklch(15.00% 0.1130 34.40)",
+          "oklch(26.43% 0.1130 34.40)",
+          "oklch(37.86% 0.1130 34.40)",
+          "oklch(49.29% 0.1130 34.40)",
+          "oklch(60.71% 0.1130 34.40)",
+          "oklch(72.14% 0.1130 34.40)",
+          "oklch(83.57% 0.1130 34.40)",
+          "oklch(95.00% 0.1130 34.40)"
+        ]
+      },
+      "pet-fill": {
+        "displayName": "pet-fill",
+        "role": "secondary",
+        "tonalRamp": [
+          "oklch(15.00% 0.1106 127.21)",
+          "oklch(26.43% 0.1106 127.21)",
+          "oklch(37.86% 0.1106 127.21)",
+          "oklch(49.29% 0.1106 127.21)",
+          "oklch(60.71% 0.1106 127.21)",
+          "oklch(72.14% 0.1106 127.21)",
+          "oklch(83.57% 0.1106 127.21)",
+          "oklch(95.00% 0.1106 127.21)"
+        ]
+      },
+      "pet-blush": {
+        "displayName": "pet-blush",
+        "role": "secondary",
+        "tonalRamp": [
+          "oklch(15.00% 0.1116 36.58)",
+          "oklch(26.43% 0.1116 36.58)",
+          "oklch(37.86% 0.1116 36.58)",
+          "oklch(49.29% 0.1116 36.58)",
+          "oklch(60.71% 0.1116 36.58)",
+          "oklch(72.14% 0.1116 36.58)",
+          "oklch(83.57% 0.1116 36.58)",
+          "oklch(95.00% 0.1116 36.58)"
+        ]
+      }
+    },
+    "shadows": [],
+    "motion": [],
+    "breakpoints": [
+      {
+        "name": "lateral-compacta",
+        "value": "850px"
+      },
+      {
+        "name": "pilha-mobile",
+        "value": "650px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Ação principal",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Botão para criar rotina ou concluir atividade; disabled também representa submissão.",
+      "html": "<button class=\"ds-primary\" type=\"button\">Criar rotina</button> <button class=\"ds-primary\" type=\"button\" disabled>Concluída</button>",
+      "css": ".ds-primary{min-height:48px;padding:10px 18px;border:1px solid var(--green,#315e43);border-radius:8px;background:var(--green,#315e43);color:#fff;cursor:pointer;font:600 1rem Arial,Helvetica,sans-serif;white-space:nowrap}.ds-primary:hover:not(:disabled){background:#234930}.ds-primary:disabled{cursor:default;background:var(--pale,#e8eddf);color:var(--muted,#58695e);border-color:var(--line,#c5cbbf)}.ds-primary:focus-visible{outline:3px solid var(--orange,#ad4c30);outline-offset:4px}"
+    },
+    {
+      "name": "Adicionar atividade",
+      "kind": "button",
+      "refersTo": "button-inline",
+      "description": "Ação contextual com fundo transparente e hover suave.",
+      "html": "<button class=\"ds-inline\" type=\"button\">Adicionar</button>",
+      "css": ".ds-inline{min-height:48px;padding:10px 18px;border:1px solid var(--green,#315e43);border-radius:8px;background:var(--green,#315e43);color:#fff;cursor:pointer;font:600 1rem Arial,Helvetica,sans-serif;white-space:nowrap;background:transparent;color:var(--green,#315e43)}.ds-inline:hover:not(:disabled){background:#234930}.ds-inline:disabled{cursor:default;background:var(--pale,#e8eddf);color:var(--muted,#58695e);border-color:var(--line,#c5cbbf)}.ds-inline:focus-visible{outline:3px solid var(--orange,#ad4c30);outline-offset:4px}.ds-inline:hover:not(:disabled){background:var(--pale,#e8eddf)}"
+    },
+    {
+      "name": "Nome da rotina",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Rótulo externo e limites reais de 2 a 80 caracteres.",
+      "html": "<label class=\"ds-label\" for=\"ds-name\">Nome da rotina <span>(obrigatório)</span></label><input class=\"ds-input\" id=\"ds-name\" name=\"name\" required minlength=\"2\" maxlength=\"80\" placeholder=\"Ex.: Minha manhã\">",
+      "css": ".ds-label{display:block;font:600 .85rem/1.5 Arial,Helvetica,sans-serif;margin-bottom:8px;color:var(--ink,#203e32)}.ds-label span{font-size:.75rem;font-weight:400;color:var(--muted,#58695e)}.ds-input{min-width:0;min-height:48px;width:100%;border:1px solid #7b887b;background:#fffefb;border-radius:8px;padding:11px 14px;color:var(--ink,#203e32);caret-color:var(--orange,#ad4c30);font:1rem Arial,Helvetica,sans-serif}.ds-input::placeholder{color:#657062}.ds-input:user-invalid{border-color:#a43c29}.ds-input:focus-visible{outline:3px solid var(--orange,#ad4c30);outline-offset:4px}"
+    },
+    {
+      "name": "Assinatura no cabeçalho",
+      "kind": "nav",
+      "description": "Único link do cabeçalho; não há menu implementado.",
+      "html": "<nav aria-label=\"Início\"><a class=\"ds-brand\" href=\"/\">rotina<span>pet</span><span class=\"ds-dot\" aria-hidden=\"true\"></span></a></nav>",
+      "css": ".ds-brand{display:flex;align-items:baseline;text-decoration:none;font:700 1.8rem/1.5 Georgia,\"Times New Roman\",serif;letter-spacing:-.04em;color:var(--ink,#203e32)}.ds-brand span:first-child{font-weight:400}.ds-dot{height:9px;width:9px;margin-left:7px;background:var(--orange,#ad4c30)}.ds-brand:focus-visible{outline:3px solid var(--orange,#ad4c30);outline-offset:4px}"
+    },
+    {
+      "name": "Humor escrito",
+      "kind": "chip",
+      "refersTo": "mood",
+      "description": "Selo informativo sem interação: estado também expresso em texto.",
+      "html": "<span class=\"ds-mood ds-happy\">Feliz</span> <span class=\"ds-mood\">De boa</span> <span class=\"ds-mood ds-sad\">Triste</span>",
+      "css": ".ds-mood{font:.75rem/1.5 Arial,Helvetica,sans-serif;color:var(--ink,#203e32);background:var(--pale,#e8eddf);border:1px solid #8a9c7d;border-radius:6px;padding:4px 8px}.ds-happy{background:#d0e4b7}.ds-sad{background:#f1e3cf}"
+    },
+    {
+      "name": "Nova rotina",
+      "kind": "card",
+      "refersTo": "new-routine",
+      "description": "Formulário destacado em verde suave, com os controles reais.",
+      "html": "<form class=\"ds-new\"><h3>Cultive uma nova rotina</h3><label class=\"ds-new-label\" for=\"ds-new-name\">Nome da rotina <span>(obrigatório)</span></label><div class=\"ds-row\"><input class=\"ds-new-input\" id=\"ds-new-name\" name=\"name\" required minlength=\"2\" maxlength=\"80\" placeholder=\"Ex.: Minha manhã\"><button class=\"ds-new-button\" type=\"submit\">Criar rotina</button></div></form>",
+      "css": ".ds-new{background:var(--pale,#e8eddf);color:var(--ink,#203e32);padding:24px;border-radius:var(--radius,14px);font:1rem/1.5 Georgia,\"Times New Roman\",serif}.ds-new h3{margin:0 0 18px;font-size:1.3rem;font-weight:400}.ds-new-label{display:block;font:600 .85rem/1.5 Arial,Helvetica,sans-serif;margin-bottom:8px}.ds-new-label span{font-size:.75rem;font-weight:400;color:var(--muted,#58695e)}.ds-row{display:flex;gap:10px}.ds-new-input{min-width:0;min-height:48px;width:100%;border:1px solid #7b887b;background:#fffefb;border-radius:8px;padding:11px 14px;color:var(--ink,#203e32);caret-color:var(--orange,#ad4c30);font:1rem Arial,Helvetica,sans-serif}.ds-new-input::placeholder{color:#657062}.ds-new-input:user-invalid{border-color:#a43c29}.ds-new-input:focus-visible{outline:3px solid var(--orange,#ad4c30);outline-offset:4px}.ds-new-button{min-height:48px;padding:10px 18px;border:1px solid var(--green,#315e43);border-radius:8px;background:var(--green,#315e43);color:#fff;cursor:pointer;font:600 1rem Arial,Helvetica,sans-serif;white-space:nowrap}.ds-new-button:hover:not(:disabled){background:#234930}.ds-new-button:disabled{cursor:default;background:var(--pale,#e8eddf);color:var(--muted,#58695e);border-color:var(--line,#c5cbbf)}.ds-new-button:focus-visible{outline:3px solid var(--orange,#ad4c30);outline-offset:4px}@media(max-width:650px){.ds-row{flex-direction:column}.ds-new-button{align-self:flex-start}}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Caderno de hábitos com companheiro pixel",
+    "overview": "Esta é uma descrição provisória extraída da interface implementada, não uma identidade de marca aprovada. O fundo papel, o texto verde escuro e os títulos serifados dão à tela o caráter de um caderno de uso diário. Listas separadas por linhas e formulários próximos das atividades mantêm a leitura direta.\n\nO pet pixel é o elemento ilustrado característico: sua expressão acompanha o estado do dia e vem acompanhada de texto. A interface atual é estática, sem animações ou transições. Público específico, identidade de marca e linguagem visual de futuras telas continuam em aberto; esta documentação registra o código atual.",
+    "keyCharacteristics": [
+      "Papel claro e verde escuro, com superfícies verde suave.",
+      "Títulos serifados e controles sem serifa, usando fontes locais.",
+      "Rotinas em listas com divisórias e formulários no contexto.",
+      "Companheiro pixel original com três expressões e humor escrito.",
+      "Estados de formulário legíveis, foco visível e ausência de movimento."
+    ],
+    "rules": [],
+    "dos": [
+      "**Do** manter as rotinas em listas abertas com divisórias e formulários junto do contexto.",
+      "**Do** preservar fontes locais, rótulos visíveis e foco de teclado em links, campos e botões.",
+      "**Do** acompanhar humor, progresso e conclusão com texto, além da cor e da ilustração.",
+      "**Do** empilhar pet e formulários conforme os breakpoints implementados."
+    ],
+    "donts": [
+      "**Don't** apresentar esta direção provisória como identidade de marca aprovada.",
+      "**Don't** acrescentar animações, sombras ou gradientes ao reproduzir a interface atual.",
+      "**Don't** suavizar os pixels do companheiro ou transformar o selo de humor em controle.",
+      "**Don't** substituir rótulos de campos por placeholders ou depender somente de cor para estados."
+    ]
+  }
+}
