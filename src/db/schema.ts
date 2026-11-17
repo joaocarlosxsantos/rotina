@@ -71,3 +71,20 @@ export const completions = pgTable(
     ),
   ],
 );
+
+export const userSettings = pgTable(
+  "user_settings",
+  {
+    userId: text("user_id").primaryKey(),
+    petKind: text("pet_kind").notNull().default("original"),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    check(
+      "user_settings_pet_kind_valid",
+      sql`${table.petKind} in ('original', 'gato', 'cachorro', 'coelho', 'dragao', 'planta')`,
+    ),
+  ],
+);

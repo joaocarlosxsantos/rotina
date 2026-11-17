@@ -31,7 +31,7 @@ test("há uma migration inicial Postgres e ela é idempotente sem alterar dados"
     await readFile("drizzle/meta/_journal.json", "utf8"),
   );
   assert.equal(journal.dialect, "postgresql");
-  assert.equal(journal.entries.length, 2);
+  assert.equal(journal.entries.length, 3);
   const connection = await createDatabase();
   try {
     await migrateDatabase(connection);
@@ -52,7 +52,7 @@ test("há uma migration inicial Postgres e ela é idempotente sem alterar dados"
     const rows = await connection.db.execute<{ count: number }>(
       sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
     );
-    assert.equal(rows.rows[0].count, 2);
+    assert.equal(rows.rows[0].count, 3);
   } finally {
     await connection.close();
   }
@@ -97,24 +97,26 @@ test("falha em migration Postgres reverte DDL e não avança o journal", async (
       await readFile("drizzle/meta/_journal.json", "utf8"),
     );
     const original = journal.entries[0];
+    const brokenTag = `000${journal.entries.length}_broken`;
     const broken = {
       ...original,
-      idx: 2,
-      when: journal.entries[1].when + 1,
-      tag: "0002_broken",
+      idx: journal.entries.length,
+      when: journal.entries[journal.entries.length - 1].when + 1,
+      tag: brokenTag,
     };
     await mkdir(join(folder, "meta"));
     await writeFile(
       join(folder, "meta", "_journal.json"),
       JSON.stringify({ ...journal, entries: [...journal.entries, broken] }),
     );
-    await copyFile(
-      `drizzle/${original.tag}.sql`,
-      join(folder, `${original.tag}.sql`),
-    );
-    await copyFile(`drizzle/${journal.entries[1].tag}.sql`, join(folder, `${journal.entries[1].tag}.sql`));
+    for (const entry of journal.entries) {
+      await copyFile(
+        `drizzle/${entry.tag}.sql`,
+        join(folder, `${entry.tag}.sql`),
+      );
+    }
     await writeFile(
-      join(folder, "0002_broken.sql"),
+      join(folder, `${brokenTag}.sql`),
       "create table rollback_probe(id integer);--> statement-breakpoint\ninsert into table_that_does_not_exist values(1);",
     );
     await assert.rejects(() => migrateDatabase(connection, folder));
@@ -125,7 +127,7 @@ test("falha em migration Postgres reverte DDL e não avança o journal", async (
     const journalRows = await connection.db.execute<{ count: number }>(
       sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
     );
-    assert.equal(journalRows.rows[0].count, 2);
+    assert.equal(journalRows.rows[0].count, journal.entries.length);
   } finally {
     await connection.close();
     await rm(folder, { recursive: true, force: true });
@@ -230,7 +232,7 @@ test("CLI aplica migration em PGlite local e repete sem mudar o journal", async 
       const result = await connection.db.execute<{ count: number }>(
         sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
       );
-      assert.equal(result.rows[0].count, 2);
+      assert.equal(result.rows[0].count, 3);
     } finally {
       await connection.close();
     }

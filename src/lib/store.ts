@@ -2,7 +2,8 @@ import { authenticatedId, type CurrentUser } from "../auth/contracts";
 import { randomUUID } from "node:crypto";
 import { and, asc, desc, eq, isNull, lte, sql } from "drizzle-orm";
 import type { Database } from "../db/client";
-import { activities, completions, routines } from "../db/schema";
+import { activities, completions, routines, userSettings } from "../db/schema";
+import { isPetKind, DEFAULT_PET_KIND, type PetKind } from "./pets";
 import {
   ALL_WEEKDAYS,
   dayKey,
@@ -302,7 +303,7 @@ export async function dashboard(db: Database,
     isNull(routines.archivedAt),
     sql`(${routines.weekdays} & ${dayBit}) != 0`,
   );
-  const [routineRows, activityRows, today, score, completedDays, history] =
+  const [routineRows, activityRows, today, score, completedDays, history, currentPet] =
     await Promise.all([
       db
         .select()
@@ -346,6 +347,7 @@ export async function dashboard(db: Database,
         .where(and(eq(completions.userId, userId), eq(activities.userId, userId)))
         .orderBy(desc(completions.eventOrder))
         .limit(30),
+      getUserPet(db, user),
     ]);
   const completed = new Set(
     today
@@ -384,5 +386,50 @@ export async function dashboard(db: Database,
       activityName: row.activityName,
     })),
     mood: petMood(done, activeActivities.length),
+    petKind: currentPet,
   };
+}
+
+export async function getUserPet(
+  db: Database,
+  user: CurrentUser,
+): Promise<PetKind> {
+  const userId = authenticatedId(user);
+  const rows = await db
+    .select({ petKind: userSettings.petKind })
+    .from(userSettings)
+    .where(eq(userSettings.userId, userId))
+    .limit(1);
+
+  if (!rows.length) return DEFAULT_PET_KIND;
+  const kind = rows[0].petKind;
+  return isPetKind(kind) ? kind : DEFAULT_PET_KIND;
+}
+
+export async function setUserPet(
+  db: Database,
+  user: CurrentUser,
+  petKind: unknown,
+): Promise<PetKind> {
+  const userId = authenticatedId(user);
+  if (!isPetKind(petKind)) {
+    throw new InputError("Pet inválido. Escolha um companheiro do catálogo.");
+  }
+
+  await db
+    .insert(userSettings)
+    .values({
+      userId,
+      petKind,
+      updatedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: userSettings.userId,
+      set: {
+        petKind,
+        updatedAt: new Date(),
+      },
+    });
+
+  return petKind;
 }
