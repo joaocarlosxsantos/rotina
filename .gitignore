@@ -13,4 +13,4 @@ data/
 *.sqlite-*
 *.tsbuildinfo
 *.log
-.impeccable/review/
+.impeccable/

@@ -117,17 +117,23 @@ No seu `.env` ou nas configurações da plataforma de hospedagem:
 GOOGLE_CLIENT_ID="seu-client-id.apps.googleusercontent.com"
 GOOGLE_CLIENT_SECRET="seu-client-secret"
 CALENDAR_TOKEN_KEY="chave-base64-de-32-bytes"
-APP_URL="http://localhost:3000" # Opcional; se omitido, infere da requisição ou de VERCEL_PROJECT_PRODUCTION_URL
+# Obrigatória em produção (ou VERCEL_PROJECT_PRODUCTION_URL). Em desenvolvimento local, se omitida, usa http://localhost:3000
+APP_URL="http://localhost:3000"
 ```
 
-Se as variáveis não estiverem configuradas, o recurso de calendário permanece desativado com mensagem explicativa amigável, sem derrubar a aplicação.
+Se as variáveis não estiverem configuradas, o recurso de calendário permanece desativado com mensagem explicativa amigável, sem derrubar a aplicação. Em ambientes de produção (`NODE_ENV=production` ou Vercel), a definição de `APP_URL` (ou `VERCEL_PROJECT_PRODUCTION_URL`) é estritamente obrigatória para evitar vulnerabilidades de Host header poisoning e open redirects; sem ela, o recurso permanece indisponível.
 
 ### 4. Segurança do Fluxo
 
 - **Somente leitura:** Nenhum evento é criado, editado ou excluído no Google Agenda.
-- **PKCE + State:** Protegido contra CSRF e interceptação de código OAuth via `code_challenge` S256 e state guardado em cookie `httpOnly`, `sameSite=lax` e `secure`.
-- **Criptografia em repouso:** Refresh tokens nunca são salvos em texto claro.
+- **PKCE + State:** Protegido contra CSRF e interceptação de código OAuth via `code_challenge` S256 e state guardado em cookie seguro `__Host-gcal_oauth` (`httpOnly`, `sameSite=lax`, `path=/`, `secure` em produção).
+- **Comparação em tempo constante:** Validação do `state` realizada com `crypto.timingSafeEqual` para prevenir ataques de temporização.
+- **Vínculo estrito de usuário e perfil:** O callback valida que o `userId` autenticado no cookie coincide estritamente com a sessão ativa. As informações de `sub` e `email` são obtidas diretamente do endpoint `userinfo` oficial do Google com `email_verified: true`, rejeitando JWTs não verificados.
+- **Criptografia em repouso autenticada (AAD):** Refresh tokens são salvos com AES-256-GCM versionado (`v1:iv:tag:cipher`) com dados adicionais autenticados (AAD = `user_id + ":" + google_sub`). Se um registro for manipulado ou transferido entre usuários/subs, a descriptografia falha por quebra de integridade.
 - **Tokens efêmeros:** Access tokens são mantidos apenas em memória temporária para consulta e descartados; nunca são gravados no banco.
-- **Isolamento multi-usuário:** Toda consulta e exclusão filtra estritamente pelo `user_id` autenticado na sessão do servidor.
+- **Revogação resiliente:** A remoção de contas dispara revogação no corpo POST do Google com timeout de 3 segundos (`AbortSignal.timeout(3000)`), não bloqueando a exclusão local caso o Google oscile.
+- **Isolamento multi-usuário:** Toda consulta e exclusão filtra estritamente pelo `user_id` autenticado na sessão do servidor. Limite de até 5 contas vinculadas por usuário.
+- **Sanitização de links:** Links de eventos (`htmlLink`) são validados e renderizados apenas se iniciarem com `https://www.google.com/` ou `https://calendar.google.com/`.
+- **Limpeza de contas órfãs (I3):** A aplicação utiliza autenticação gerenciada via Neon Auth (Better Auth) sem tabela local de usuários nem restrição de chave estrangeira (FK) cascade no banco de dados da aplicação. Caso um usuário seja excluído no Neon Auth, seus registros de contas em `calendar_accounts` podem ser limpos por meio de rotina periódica de manutenção ou job agendado (`DELETE FROM calendar_accounts WHERE user_id NOT IN (...)`) ou via webhook de encerramento de conta.
 - **Resiliência:** A expiração (`invalid_grant`) de uma conta Google não interrompe o carregamento das outras contas conectadas.
 
