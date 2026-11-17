@@ -15,12 +15,15 @@ import {
   generateCodeChallenge,
   generateCodeVerifier,
   generateOAuthState,
+  GoogleEmailUnverifiedError,
+  GoogleNoOfflineAccessError,
   GoogleOAuthError,
   refreshGoogleAccessToken,
   revokeGoogleToken,
   timingSafeStringEqual,
 } from "../src/lib/calendar/oauth";
 import {
+  CalendarAccountLimitError,
   deleteCalendarAccount,
   getCalendarFeed,
   isValidCalendarHtmlLink,
@@ -192,8 +195,8 @@ test("Configuração do Calendar e validação de APP_URL em produção (M2)", (
   assert.equal(prodWithVercelUrl.isAvailable, true);
   assert.equal(prodWithVercelUrl.appUrl, "https://rotina-self.vercel.app");
 
-  // 5. getRedirectUri usa a appUrl da configuração
-  const redirectUri = getRedirectUri(undefined, {
+  // 5. getRedirectUri usa a appUrl da configuração (sem parâmetro origin)
+  const redirectUri = getRedirectUri({
     GOOGLE_CLIENT_ID: "client-id",
     GOOGLE_CLIENT_SECRET: "client-secret",
     CALENDAR_TOKEN_KEY: testKey,
@@ -396,6 +399,123 @@ test("Limite máximo de 5 contas vinculadas por usuário (B5)", async () => {
     const conta1 = contasAposUpdate.find((c) => c.googleSub === "sub-google-1");
     assert.equal(conta1?.email, "conta1-novoemail@exemplo.test");
   });
+});
+
+test("Limite de 5 contas com conexões concorrentes via Promise.all e advisory lock", async () => {
+  const testKey = randomBytes(32).toString("base64");
+  process.env.CALENDAR_TOKEN_KEY = testKey;
+  process.env.GOOGLE_CLIENT_ID = "test-client.google.com";
+  process.env.GOOGLE_CLIENT_SECRET = "test-secret";
+
+  const userConc = {
+    id: `user-concorrente-${randomBytes(6).toString("hex")}`,
+    email: "concorrente@example.test",
+    name: "Usuário Concorrente",
+  };
+
+  await withDatabase(async (db) => {
+    // Insere previamente 4 contas
+    for (let i = 1; i <= 4; i++) {
+      const sub = `sub-previo-${i}`;
+      await saveCalendarAccount(db, userConc, {
+        googleSub: sub,
+        email: `conta${i}@previo.test`,
+        refreshTokenEnc: encryptToken(`token-${i}`, testKey, `${userConc.id}:${sub}`),
+      });
+    }
+
+    const contasIniciais = await listCalendarAccounts(db, userConc);
+    assert.equal(contasIniciais.length, 4);
+
+    // Dispara duas conexões simultâneas concorrentes com Promise.allSettled (tentando ser a 5ª e a 6ª)
+    const contaA = {
+      googleSub: "sub-concorrente-A",
+      email: "contaA@concorrente.test",
+      refreshTokenEnc: encryptToken("token-A", testKey, `${userConc.id}:sub-concorrente-A`),
+    };
+    const contaB = {
+      googleSub: "sub-concorrente-B",
+      email: "contaB@concorrente.test",
+      refreshTokenEnc: encryptToken("token-B", testKey, `${userConc.id}:sub-concorrente-B`),
+    };
+
+    const results = await Promise.allSettled([
+      saveCalendarAccount(db, userConc, contaA),
+      saveCalendarAccount(db, userConc, contaB),
+    ]);
+
+    const fulfilled = results.filter((r) => r.status === "fulfilled");
+    const rejected = results.filter((r) => r.status === "rejected");
+
+    // Graças ao advisory lock transacional, exatamente uma passa e a outra é bloqueada
+    assert.equal(fulfilled.length, 1, "Exatamente uma conta deve ser aceita atingindo o limite de 5");
+    assert.equal(rejected.length, 1, "A conta excedente concorrente deve ser rejeitada");
+
+    const rejectionReason = (rejected[0] as PromiseRejectedResult).reason;
+    assert.ok(rejectionReason instanceof CalendarAccountLimitError);
+    assert.match(rejectionReason.message, /Limite máximo de 5 contas Google atingido/);
+
+    const contasFinais = await listCalendarAccounts(db, userConc);
+    assert.equal(contasFinais.length, 5, "Banco deve conter exatamente 5 contas após concorrência");
+  });
+});
+
+test("Fetches de OAuth incluem AbortSignal para timeout de segurança (N2)", async () => {
+  let tokenSignalCaptured = false;
+  let userinfoSignalCaptured = false;
+  let refreshSignalCaptured = false;
+
+  const mockFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const urlStr = String(input);
+    if (urlStr.includes("oauth2.googleapis.com/token")) {
+      const bodyStr = String(init?.body ?? "");
+      if (bodyStr.includes("grant_type=refresh_token")) {
+        if (init?.signal) refreshSignalCaptured = true;
+        return new Response(JSON.stringify({ access_token: "mock-acc" }), { status: 200 });
+      }
+      if (init?.signal) tokenSignalCaptured = true;
+      return new Response(
+        JSON.stringify({
+          access_token: "mock-acc",
+          refresh_token: "mock-ref",
+          expires_in: 3600,
+        }),
+        { status: 200 },
+      );
+    }
+    if (urlStr.includes("openidconnect.googleapis.com/v1/userinfo")) {
+      if (init?.signal) userinfoSignalCaptured = true;
+      return new Response(
+        JSON.stringify({
+          sub: "mock-sub",
+          email: "mock@test.com",
+          email_verified: true,
+        }),
+        { status: 200 },
+      );
+    }
+    return new Response("Not found", { status: 404 });
+  };
+
+  await exchangeCodeForTokens({
+    code: "c",
+    codeVerifier: "v",
+    redirectUri: "http://localhost/cb",
+    clientId: "id",
+    clientSecret: "sec",
+    fetchFn: mockFetch as typeof fetch,
+  });
+
+  await refreshGoogleAccessToken({
+    refreshToken: "ref",
+    clientId: "id",
+    clientSecret: "sec",
+    fetchFn: mockFetch as typeof fetch,
+  });
+
+  assert.equal(tokenSignalCaptured, true, "fetch de token deve ter signal");
+  assert.equal(userinfoSignalCaptured, true, "fetch de userinfo deve ter signal");
+  assert.equal(refreshSignalCaptured, true, "fetch de refresh deve ter signal");
 });
 
 test("Sanitização de links de eventos htmlLink (I4)", () => {

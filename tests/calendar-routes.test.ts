@@ -20,7 +20,7 @@ test("Rota /api/calendar/connect redireciona anônimo para /entrar com Referrer-
   assert.equal(res.headers.get("Location"), "https://rotina-self.vercel.app/entrar");
 });
 
-test("Rota /api/calendar/connect define cookie __Host-gcal_oauth, Referrer-Policy e redirect para autenticado", async () => {
+test("Rota /api/calendar/connect define cookie __Host-gcal_oauth com secure: true sempre, Referrer-Policy e redirect", async () => {
   const req = new NextRequest("https://qualquer-host.teste/api/calendar/connect");
   const res = await handleConnect(req, TEST_USER);
 
@@ -36,11 +36,49 @@ test("Rota /api/calendar/connect define cookie __Host-gcal_oauth, Referrer-Polic
   assert.equal(cookie.path, "/");
   assert.equal(cookie.sameSite, "lax");
   assert.equal(cookie.httpOnly, true);
+  // B1: assert de secure: true SEMPRE (localhost e prod aceitam Secure)
+  assert.equal(cookie.secure, true, "Cookie __Host- deve ter secure: true sempre");
 
   const parsed = JSON.parse(cookie.value);
   assert.ok(parsed.state);
   assert.ok(parsed.codeVerifier);
   assert.equal(parsed.userId, TEST_USER.id);
+});
+
+test("Rota /api/calendar/connect e callback sem appUrl respondem com redirect relativo sem host (N3)", async () => {
+  const envMap = process.env as Record<string, string | undefined>;
+  const oldAppUrl = envMap.APP_URL;
+  const oldNodeEnv = envMap.NODE_ENV;
+  try {
+    delete envMap.APP_URL;
+    envMap.NODE_ENV = "production";
+
+    // Connect sem appUrl
+    const connectReq = new NextRequest("https://host-externo.teste/api/calendar/connect");
+    const connectRes = await handleConnect(connectReq, TEST_USER);
+    assert.equal(connectRes.status, 307);
+    assert.equal(
+      connectRes.headers.get("Location"),
+      "/calendario?error=unconfigured",
+      "Deve retornar redirect relativo sem host",
+    );
+    assert.equal(connectRes.headers.get("Referrer-Policy"), "no-referrer");
+
+    // Callback sem appUrl
+    const callbackReq = new NextRequest("https://host-externo.teste/api/calendar/callback?code=abc&state=xyz");
+    const callbackRes = await handleCallback(callbackReq, TEST_USER);
+    assert.equal(callbackRes.status, 307);
+    assert.equal(
+      callbackRes.headers.get("Location"),
+      "/calendario?error=unconfigured",
+      "Deve retornar redirect relativo sem host",
+    );
+  } finally {
+    if (oldAppUrl !== undefined) envMap.APP_URL = oldAppUrl;
+    else delete envMap.APP_URL;
+    if (oldNodeEnv !== undefined) envMap.NODE_ENV = oldNodeEnv;
+    else delete envMap.NODE_ENV;
+  }
 });
 
 test("Rota /api/calendar/callback redireciona anônimo para /entrar com Referrer-Policy", async () => {
