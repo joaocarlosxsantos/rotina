@@ -189,9 +189,8 @@ test("Header renderiza navegação responsiva, marca item ativo e exibe menu do 
   assert.ok(html.includes('href="/pets"'), "Deve conter link de Pets");
   assert.ok(html.includes('aria-current="page"'), "Link ativo deve conter aria-current='page'");
 
-  // Calendário desabilitado
-  assert.ok(html.includes('aria-disabled="true"'), "Calendário deve ter aria-disabled='true'");
-  assert.ok(html.includes("Em breve"), "Calendário deve ter indicador 'Em breve'");
+  // Link Calendário habilitado
+  assert.ok(html.includes('href="/calendario"'), "Deve conter link para /calendario");
 
   // Menu do usuário
   assert.ok(html.includes("usuario@teste.com"), "Deve exibir o e-mail do usuário");

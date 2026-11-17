@@ -210,9 +210,7 @@ test('navegação da Fase 8 usa tokens AA, foco 3px e estados não apenas por co
   assert.match(ruleBody('.user-email'), /font-size:\s*var\(--text-small\)/);
 
   const header = fs.readFileSync(HEADER_PATH, 'utf8');
-  assert.ok(header.includes('aria-disabled="true"'), 'Calendário deve estar marcado como aria-disabled');
-  assert.ok(header.includes('Em breve'), 'Calendário desktop precisa do rótulo Em breve');
-  assert.ok(header.includes('breve'), 'Calendário mobile precisa do rótulo breve');
+  assert.ok(header.includes('href="/calendario"'), 'Calendário deve estar habilitado como link para /calendario');
 });
 
 test('barra de abas e /pets usam tokens AA, alvos de 44px e fonte de 14px', () => {

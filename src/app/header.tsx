@@ -138,14 +138,13 @@ export function Header({ active, user, mood }: HeaderProps) {
           >
             Pets
           </Link>
-          <span
-            className="nav-link-disabled"
-            aria-disabled="true"
-            title="Calendário (em breve na Fase 9)"
+          <Link
+            href="/calendario"
+            aria-current={active === "calendario" ? "page" : undefined}
+            className={active === "calendario" ? "active" : undefined}
           >
             Calendário
-            <span className="badge-soon">Em breve</span>
-          </span>
+          </Link>
         </nav>
         <div className="user-menu">
           <span className="user-email" title={user.email}>
@@ -184,16 +183,14 @@ export function Header({ active, user, mood }: HeaderProps) {
           <IconPets />
           <span>Pets</span>
         </Link>
-        <span
-          className="tab-item tab-disabled"
-          aria-disabled="true"
-          title="Calendário (em breve na Fase 9)"
+        <Link
+          href="/calendario"
+          className={`tab-item ${active === "calendario" ? "active" : ""}`}
+          aria-current={active === "calendario" ? "page" : undefined}
         >
           <IconCalendario />
-          <span>
-            Calendário <small className="tab-badge">breve</small>
-          </span>
-        </span>
+          <span>Calendário</span>
+        </Link>
       </nav>
     </>
   );

@@ -1640,3 +1640,365 @@ summary {
     height: 56px !important;
   }
 }
+
+/* ==========================================================================
+   Fase 9: Google Calendar (/calendario)
+   ========================================================================== */
+
+.calendar-page {
+  padding-block: 24px 64px;
+}
+
+.calendar-hero {
+  margin-bottom: 32px;
+}
+
+.calendar-hero h1 {
+  font-size: clamp(2rem, 5vw, 2.8rem);
+  line-height: 1.15;
+  margin-bottom: 12px;
+}
+
+.calendar-hero p {
+  color: var(--muted);
+  font-size: 1.05rem;
+  line-height: 1.5;
+}
+
+.calendar-unconfigured {
+  background: var(--pale);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 32px 24px;
+  margin-top: 24px;
+}
+
+.calendar-unconfigured h2 {
+  font-size: 1.4rem;
+  color: var(--ink);
+  margin-bottom: 12px;
+}
+
+.calendar-unconfigured p {
+  color: var(--muted);
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+
+.calendar-unconfigured code {
+  background: var(--paper);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.9em;
+  border: 1px solid var(--line);
+}
+
+.calendar-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 32px;
+  align-items: start;
+}
+
+.calendar-date-label {
+  display: block;
+  font-size: var(--text-small);
+  color: var(--muted);
+  text-transform: capitalize;
+  margin-top: 2px;
+}
+
+.events-counter {
+  font-size: var(--text-small);
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.calendar-empty {
+  text-align: center;
+  padding: 48px 24px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.calendar-empty h3 {
+  font-size: 1.3rem;
+  margin-bottom: 8px;
+  color: var(--ink);
+}
+
+.calendar-empty p {
+  margin-inline: auto;
+  margin-bottom: 24px;
+}
+
+.btn-connect-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 12px 24px;
+  background: var(--green);
+  color: var(--primary-text);
+  font-weight: 600;
+  text-decoration: none;
+  border-radius: 8px;
+  transition: background-color 0.15s ease;
+}
+
+.btn-connect-primary:hover {
+  background: var(--primary-hover);
+}
+
+.btn-connect-primary:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.btn-connect-secondary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 10px 16px;
+  background: var(--paper);
+  color: var(--green);
+  border: 1px dashed var(--green);
+  font-weight: 600;
+  font-size: var(--text-small);
+  text-decoration: none;
+  border-radius: 8px;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.btn-connect-secondary:hover {
+  background: var(--pale);
+}
+
+.btn-connect-secondary:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.calendar-events-list {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0 0;
+  display: grid;
+  gap: 12px;
+}
+
+.calendar-event-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px 18px;
+  transition: border-color 0.15s ease;
+}
+
+.calendar-event-card:hover {
+  border-color: var(--green);
+}
+
+.event-time-col {
+  flex-shrink: 0;
+  min-width: 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.event-start-time {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.event-end-time {
+  font-size: var(--text-small);
+  color: var(--muted);
+}
+
+.event-info-col {
+  flex-grow: 1;
+  min-width: 0;
+}
+
+.event-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0 0 8px;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.event-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.event-account-badge {
+  display: inline-block;
+  font-size: var(--text-small);
+  color: var(--muted);
+  background: var(--pale);
+  padding: 2px 8px;
+  border-radius: 9999px;
+  border: 1px solid var(--line);
+  max-width: 220px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.event-link {
+  font-size: var(--text-small);
+  color: var(--green);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.event-link:hover {
+  color: var(--primary-hover);
+}
+
+.calendar-accounts-sidebar {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.connect-action-box {
+  margin-bottom: 16px;
+}
+
+.connected-accounts-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 20px;
+  display: grid;
+  gap: 12px;
+}
+
+.connected-account-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper-muted);
+}
+
+.connected-account-item.account-has-error {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.account-details {
+  min-width: 0;
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.account-email {
+  font-size: var(--text-small);
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.account-status-ok {
+  font-size: var(--text-small);
+  color: var(--green);
+  font-weight: 500;
+}
+
+.account-error-msg {
+  font-size: var(--text-small);
+  color: var(--danger-text);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.btn-reconnect-link {
+  color: var(--danger-text);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.account-remove-form {
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.btn-remove-account {
+  min-height: 44px;
+  padding: 8px 14px;
+  font-size: var(--text-small);
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-remove-account:hover {
+  background: var(--danger-soft);
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.btn-remove-account:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.calendar-privacy-note {
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+  font-size: var(--text-small);
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.calendar-privacy-note h4 {
+  font-size: var(--text-small);
+  margin-bottom: 6px;
+  color: var(--ink);
+}
+
+@media (max-width: 850px) {
+  .calendar-workspace {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+}
+
+@media (max-width: 420px) {
+  .calendar-event-card {
+    flex-direction: column;
+    gap: 8px;
+  }
+  .event-time-col {
+    min-width: unset;
+    flex-direction: row;
+    gap: 8px;
+    align-items: baseline;
+  }
+}
