@@ -106,7 +106,7 @@ export function activityScheduleFromForm(
   )
     return validActivitySchedule({ weekdays: Number(mask), onceDate: null });
   if (mode === "once" && !mask)
-    return validActivitySchedule({ weekdays: null, onceDate: date });
+    return { weekdays: null, onceDate: validDate(date) };
   throw new InputError(
     "Repetição inválida. Escolha pelo menos um dia ou informe uma data válida.",
   );

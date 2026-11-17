@@ -35,6 +35,19 @@ const weekly = (weekdays: number) => ({ weekdays, onceDate: null });
 const once = (onceDate: string) => ({ weekdays: null, onceDate });
 const at = (day: string) => new Date(`${day}T14:00:00Z`);
 
+test("modo once exige data válida e nunca cai em herança se a data faltar ou não for string", () => {
+  for (const value of [null, "", "2026-02-29", new Blob(["2026-11-20"])]) {
+    const form = new FormData();
+    form.set("repeatMode", "once");
+    if (value !== null) form.set("onceDate", value);
+    assert.throws(() => activityScheduleFromForm(form), InputError);
+  }
+  const form = new FormData();
+  form.set("repeatMode", "once");
+  form.set("onceDate", "2026-11-20");
+  assert.deepEqual(activityScheduleFromForm(form), once("2026-11-20"));
+});
+
 test("agenda efetiva herda, substitui a rotina ou usa só a data; semana, mês e fuso", () => {
   assert.equal(activityScheduledOn(inherit, 62, "2026-11-20"), true);
   assert.equal(activityScheduledOn(inherit, 62, "2026-11-21"), false);
