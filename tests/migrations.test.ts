@@ -31,7 +31,7 @@ test("há uma migration inicial Postgres e ela é idempotente sem alterar dados"
     await readFile("drizzle/meta/_journal.json", "utf8"),
   );
   assert.equal(journal.dialect, "postgresql");
-  assert.equal(journal.entries.length, 3);
+  assert.equal(journal.entries.length, 4);
   const connection = await createDatabase();
   try {
     await migrateDatabase(connection);
@@ -52,7 +52,7 @@ test("há uma migration inicial Postgres e ela é idempotente sem alterar dados"
     const rows = await connection.db.execute<{ count: number }>(
       sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
     );
-    assert.equal(rows.rows[0].count, 3);
+    assert.equal(rows.rows[0].count, 4);
   } finally {
     await connection.close();
   }
@@ -232,7 +232,7 @@ test("CLI aplica migration em PGlite local e repete sem mudar o journal", async 
       const result = await connection.db.execute<{ count: number }>(
         sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
       );
-      assert.equal(result.rows[0].count, 3);
+      assert.equal(result.rows[0].count, 4);
     } finally {
       await connection.close();
     }

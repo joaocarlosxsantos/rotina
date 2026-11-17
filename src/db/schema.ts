@@ -88,3 +88,21 @@ export const userSettings = pgTable(
     ),
   ],
 );
+
+export const calendarAccounts = pgTable(
+  "calendar_accounts",
+  {
+    id: uuid("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    googleSub: text("google_sub").notNull(),
+    email: text("email").notNull(),
+    refreshTokenEnc: text("refresh_token_enc").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("calendar_accounts_user_sub").on(table.userId, table.googleSub),
+    index("calendar_accounts_user").on(table.userId),
+  ],
+);
