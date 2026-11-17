@@ -1,548 +1,690 @@
 import type { PetKind } from "../lib/pets";
 
-export type PetSpriteProps = {
-  size?: number;
-  className?: string;
-  label?: string;
-};
-
+export type PetSpriteProps = { size?: number; className?: string; label?: string };
 export type Mood = "sad" | "ok" | "happy";
-
-type Pixel = readonly [x: number, y: number];
-
+export type Palette = Readonly<Record<string, string>>;
 export interface SpriteDefinition {
-  colors: Record<string, string>;
-  rows: readonly string[];
-  faces: Record<
-    Mood,
-    {
-      eyes: readonly Pixel[];
-      mouth: readonly Pixel[];
-      cheeks: readonly Pixel[];
-    }
-  >;
+  /** Legenda: . transparente; o contorno; b base; s sombra; l luz;
+   * a detalhe; c bochecha; e olho; h brilho do olho; t lágrima. */
+  colors: Palette;
+  sadColors: Palette;
+  rows: Readonly<Record<Mood, readonly string[]>>;
 }
-
 export function normalizeSize(size?: number): number {
-  if (typeof size !== "number" || !Number.isFinite(size) || size <= 0) {
-    return 180;
-  }
+  if (typeof size !== "number" || !Number.isFinite(size) || size <= 0) return 180;
   return Math.max(1, Math.round(size));
 }
-
-function PixelRect({ x, y, fill }: { x: number; y: number; fill: string }) {
-  return (
-    <rect
-      x={x}
-      y={y}
-      width={1}
-      height={1}
-      fill={fill}
-      shapeRendering="crispEdges"
-    />
-  );
+export interface PixelRun { x: number; y: number; width: number; key: string }
+/** Uma corrida por cor contígua; transparência não produz geometria. */
+export function horizontalRuns(rows: readonly string[]): PixelRun[] {
+  return rows.flatMap((row, y) => {
+    const runs: PixelRun[] = [];
+    for (let x = 0; x < row.length;) {
+      const key = row[x];
+      let end = x + 1;
+      while (row[end] === key) end++;
+      if (key !== ".") runs.push({ x, y, width: end - x, key });
+      x = end;
+    }
+    return runs;
+  });
 }
 
-// 1. Ursinho (Original)
 const ORIGINAL_SPRITE: SpriteDefinition = {
-  colors: {
-    k: "#203e32", // OUTLINE
-    g: "#a9ca7b", // BODY
-    l: "#c7e39a", // HIGHLIGHT
-    b: "#d58068", // BLUSH
-  },
-  rows: [
-    "................",
-    "...kk......kk...",
-    "..kggk....kggk..",
-    "..kgggkkkkgggk..",
-    ".kggggggggggggk.",
-    "kgglgggggggglggk",
-    "kggggggggggggggk",
-    "kggggggggggggggk",
-    "kggggggggggggggk",
-    "kggggggggggggggk",
-    ".kggggggggggggk.",
-    ".kggggggggggggk.",
-    "..kggggggggggk..",
-    "..kggggggggggk..",
-    "...kkkk..kkkk...",
-    "..kkkk....kkkk..",
-  ],
-  faces: {
-    sad: {
-      eyes: [
-        [4, 6],
-        [5, 7],
-        [10, 7],
-        [11, 6],
-      ],
-      mouth: [
-        [6, 11],
-        [7, 10],
-        [8, 10],
-        [9, 11],
-      ],
-      cheeks: [],
-    },
-    ok: {
-      eyes: [
-        [4, 7],
-        [5, 7],
-        [10, 7],
-        [11, 7],
-      ],
-      mouth: [
-        [6, 10],
-        [7, 10],
-        [8, 10],
-        [9, 10],
-      ],
-      cheeks: [],
-    },
-    happy: {
-      eyes: [
-        [3, 7],
-        [4, 6],
-        [5, 7],
-        [10, 7],
-        [11, 6],
-        [12, 7],
-      ],
-      mouth: [
-        [6, 9],
-        [7, 10],
-        [8, 10],
-        [9, 9],
-      ],
-      cheeks: [
-        [2, 9],
-        [3, 9],
-        [12, 9],
-        [13, 9],
-      ],
-    },
+  colors: {"o": "#344f3c", "b": "#a9ca7b", "s": "#7fa461", "l": "#c7e39a", "a": "#f4e9c8", "c": "#d78f82", "e": "#293e36", "h": "#fff9e9", "t": "#91b9c3"},
+  sadColors: {"o": "#43564b", "b": "#a0b69a", "s": "#7c9681", "l": "#bdcfb7", "a": "#f4e9c8", "c": "#bba0a5", "e": "#293e36", "h": "#fff9e9", "t": "#9cbccc"},
+  rows: {
+    sad: [
+      "................................",
+      "................................",
+      "................................",
+      "................................",
+      "................................",
+      "................................",
+      "................................",
+      "........ooo...........ooo.......",
+      ".......olllo.........obsso......",
+      "......olaaalo.......obaaaso.....",
+      ".....ollaaallo.....obbaaasso....",
+      ".....ollaaalllooooobbbaaasso....",
+      ".....olllllllllllllbbbbsssso....",
+      ".....olllllllllllllbbbbsssso....",
+      "......ollllllllllllbbbbssso.....",
+      ".......olllllllllllbbbbsso......",
+      ".......obbbbbbbbbbbbbbbso.......",
+      "......obbebbbbbbbbbbbbesso......",
+      "......obbeeebbbbbbbbeeesso......",
+      "......obbbehebbbbbbehebsso......",
+      "......obbbbeebbbbbbeebbsso......",
+      ".......obbbtbaaooaabtbbso.......",
+      ".......occbtaaaaaaaatbcco.......",
+      "........obbbaaaaaaaabbbo........",
+      ".........obbbaaooaabbbbo........",
+      "..........osslollossssso........",
+      ".........ossllllllsssssso.......",
+      "........ossssllllsssssssso......",
+      "........osssssoooooossssso......",
+      ".........ooooo......ooooo.......",
+      "................................",
+      "................................",
+    ],
+    ok: [
+      "................................",
+      "................................",
+      "................................",
+      "................................",
+      "................................",
+      "........ooo...........ooo.......",
+      ".......olllo.........obsso......",
+      "......olaaalo.......obaaaso.....",
+      ".....ollaaallo.....obbaaasso....",
+      ".....ollaaalllooooobbbaaasso....",
+      ".....olllllllllllllbbbbsssso....",
+      ".....olllllllllllllbbbbsssso....",
+      "......ollllllllllllbbbbssso.....",
+      ".......olllllllllllbbbbsso......",
+      ".......obbbbbbbbbbbbbbbso.......",
+      "......obbbeebbbbbbbbeebsso......",
+      "......obbehhebbbbbbehhesso......",
+      "......obbeeeebbbbbbeeeesso......",
+      "......obbbeebbbbbbbbeebsso......",
+      ".......obbbbbaaooaabbbbso.......",
+      ".......occbbaaaaaaaabbcco.......",
+      "........obbbaaaaaaaabbbo........",
+      ".........obbbaaooaabbbo.........",
+      "..........osssssssssssso........",
+      "..........osssssssssssso........",
+      "..........ossllllsssssso........",
+      ".........ossllllllsssssso.......",
+      "........ossssllllsssssssso......",
+      "........osssssoooooossssso......",
+      ".........ooooo......ooooo.......",
+      "................................",
+      "................................",
+    ],
+    happy: [
+      "................................",
+      "................................",
+      "................................",
+      "..........................c.c...",
+      "........ooo...........ooo.ccc...",
+      ".......olllo.........obsso.c....",
+      "......olaaalo.......obaaaso.....",
+      ".....ollaaallo.....obbaaasso....",
+      ".....ollaaalllooooobbbaaasso....",
+      ".....olllllllllllllbbbbsssso....",
+      ".....olllllllllllllbbbbsssso....",
+      "......ollllllllllllbbbbssso.....",
+      ".......olllllllllllbbbbsso......",
+      ".......obbbbbbbbbbbbbbbso.......",
+      "......obbbeebbbbbbbbeebsso......",
+      "......obbehhebbbbbbehhesso......",
+      "......obbeheebbbbbbeheesso......",
+      "......obbeeeebbbbbbeeeesso......",
+      ".......obbeebaaooaabeebso.......",
+      ".......occbbaaaaaaaabbcco.......",
+      "........obbbaoaaaaoabbbo........",
+      ".........obbbaooooabbbo.........",
+      "..........ossssccssssso.........",
+      "..........osssssssssssso........",
+      "..........osssssssssssso........",
+      "..........ossllllsssssso........",
+      ".........ossllllllsssssso.......",
+      "........ossssllllsssssssso......",
+      "........osssssoooooossssso......",
+      ".........ooooo......ooooo.......",
+      "................................",
+      "................................",
+    ],
   },
 };
 
-// 2. Gatinho
 const GATO_SPRITE: SpriteDefinition = {
-  colors: {
-    k: "#2c1e19",
-    g: "#e68c3a",
-    l: "#f7b068",
-    h: "#fce9d3",
-    p: "#e88085",
-    b: "#e26f63",
-  },
-  rows: [
-    "................",
-    "..kk......kk....",
-    ".kppk....kppk...",
-    ".kgggk..kgggk...",
-    ".kggggkkggggk...",
-    "kggggggggggggk..",
-    "kgglgggggggglk..",
-    "kggggggggggggk..",
-    "kgggghhhhggggk..",
-    "kggggggggggggkk.",
-    ".kgggghhhhggkkkk",
-    ".kggggggggggkk..",
-    "..kghhhhhhgk....",
-    "..kggggggggk....",
-    "...kkkk..kk.....",
-    "................",
-  ],
-  faces: {
-    sad: {
-      eyes: [
-        [4, 6],
-        [5, 7],
-        [10, 7],
-        [11, 6],
-      ],
-      mouth: [
-        [7, 10],
-        [8, 10],
-        [6, 11],
-        [9, 11],
-      ],
-      cheeks: [],
-    },
-    ok: {
-      eyes: [
-        [4, 7],
-        [5, 7],
-        [10, 7],
-        [11, 7],
-      ],
-      mouth: [
-        [6, 9],
-        [7, 10],
-        [8, 10],
-        [9, 9],
-      ],
-      cheeks: [],
-    },
-    happy: {
-      eyes: [
-        [3, 7],
-        [4, 6],
-        [5, 7],
-        [10, 7],
-        [11, 6],
-        [12, 7],
-      ],
-      mouth: [
-        [6, 9],
-        [7, 10],
-        [8, 10],
-        [9, 9],
-      ],
-      cheeks: [
-        [2, 8],
-        [3, 8],
-        [12, 8],
-        [13, 8],
-      ],
-    },
+  colors: {"o": "#70493e", "b": "#e7a574", "s": "#c77d55", "l": "#f6c794", "a": "#fae7cb", "c": "#db8a8a", "e": "#513f3e", "h": "#fff9ed", "t": "#9db9c9"},
+  sadColors: {"o": "#6b5551", "b": "#c4aaa0", "s": "#a88b84", "l": "#ddd0bd", "a": "#fae7cb", "c": "#bba0a5", "e": "#513f3e", "h": "#fff9ed", "t": "#9cbccc"},
+  rows: {
+    sad: [
+      "................................",
+      "................................",
+      "................................",
+      "................................",
+      "................................",
+      "................................",
+      "................................",
+      "................................",
+      "................................",
+      "................................",
+      "................................",
+      "............ooooooo.o...........",
+      ".....ooooooollsllslobooooooo....",
+      "......olllllllsllslbbbbssso.....",
+      ".......olllllllssllbbbbsso......",
+      ".......olllllllllllbbbbso.......",
+      ".......obbbbbbbbbbbbbbbso.......",
+      "......obbebbbbbbbbbbbbesso......",
+      "......obbeeebbbbbbbbeeesso......",
+      "......obbbehebbbbbbehebsso......",
+      "......ossbbeebbbbbbeebbsso......",
+      ".......obbbtbaaooaabtbbso.......",
+      ".......occbtaaaaaaaatbcco.......",
+      "........obbbaaaaaaaabbbo........",
+      ".........obbbaaooaabbbbo........",
+      "..........osssossossssssoooo....",
+      ".........ossssssssssssssssso....",
+      "........ossbbssssssssbbssssso...",
+      "........osssssoooooossssssso....",
+      ".........ooooo......oooooooo....",
+      "................................",
+      "................................",
+    ],
+    ok: [
+      "................................",
+      "................................",
+      "................................",
+      "................................",
+      "................................",
+      "......o..................o......",
+      "......oo................oo......",
+      "......oloo.............oso......",
+      "......olllo...........osso......",
+      "......olallo.oooooo.oobaso......",
+      "......olaallolsllslobbaaso......",
+      "......olaaalllsllslbbaaaso......",
+      "......ollllllllssllbbbbsso......",
+      "......ollllllllllllbbbbsso......",
+      "......obbbbbbbbbbbbbbbbsso......",
+      "......obbbeebbbbbbbbeebsso......",
+      "......obbehhebbbbbbehhesso......",
+      "......obbeeeebbbbbbeeeesso...o..",
+      "......ossbeebbbbbbbbeebsso..oo..",
+      ".......obbbbbaaooaabbbbso..osso.",
+      ".......occbbaaaaaaaabbcco..osso.",
+      "........obbbaaaaaaaabbbo...osso.",
+      ".........obbbaaooaabbbo....oso..",
+      "..........osssssssssssso...oso..",
+      "..........osssssssssssso...oso..",
+      "..........osssssssssssssooosso..",
+      ".........osssssssssssssssssso...",
+      "........ossbbssssssssbbsssso....",
+      "........osssssoooooosssssoo.....",
+      ".........ooooo......ooooo.......",
+      "................................",
+      "................................",
+    ],
+    happy: [
+      "................................",
+      "................................",
+      "................................",
+      "..........................c.c...",
+      "......o..................occc...",
+      "......oo................oo.c....",
+      "......oloo.............oso......",
+      "......olllo...........osso......",
+      "......olallo.oooooo.oobaso......",
+      "......olaallolsllslobbaaso......",
+      "......olaaalllsllslbbaaaso......",
+      "......ollllllllssllbbbbsso......",
+      "......ollllllllllllbbbbsso......",
+      "......obbbbbbbbbbbbbbbbsso......",
+      "......obbbeebbbbbbbbeebsso......",
+      "......obbehhebbbbbbehhesso......",
+      "......obbeheebbbbbbeheesso......",
+      "......osseeeebbbbbbeeeesso...o..",
+      ".......obbeebaaooaabeebso...oo..",
+      ".......occbbaaaaaaaabbcco..osso.",
+      "........obbbaoaaaaoabbbo...osso.",
+      ".........obbbaooooabbbo....osso.",
+      "..........ossssccssssso....oso..",
+      "..........osssssssssssso...oso..",
+      "..........osssssssssssso...oso..",
+      "..........osssssssssssssooosso..",
+      ".........osssssssssssssssssso...",
+      "........ossbbssssssssbbsssso....",
+      "........osssssoooooosssssoo.....",
+      ".........ooooo......ooooo.......",
+      "................................",
+      "................................",
+    ],
   },
 };
 
-// 3. Cachorrinho
 const CACHORRO_SPRITE: SpriteDefinition = {
-  colors: {
-    k: "#241911",
-    g: "#d99b59",
-    p: "#804823", // manchinha no olho
-    l: "#ebd0a9",
-    h: "#fff1db", // focinho creme
-    b: "#de766d",
-  },
-  rows: [
-    "................",
-    "...kkk..kkk.....",
-    "..kppk..kppk....",
-    "..kppk..kppk....",
-    ".kppggggggppk...",
-    ".kpgggggggppk...",
-    "kgggglgggglggk..",
-    "kggggggppggggk..",
-    "kgggghhhhggggk..",
-    "kggggggggggggk..",
-    ".kggggggggggk...",
-    ".kggghhhhgggk...",
-    "..kggggggggk....",
-    "..kggggggggk....",
-    "...kkkk..kk.....",
-    "................",
-  ],
-  faces: {
-    sad: {
-      eyes: [
-        [4, 7],
-        [5, 8],
-        [10, 8],
-        [11, 7],
-      ],
-      mouth: [
-        [7, 11],
-        [8, 11],
-        [6, 12],
-        [9, 12],
-      ],
-      cheeks: [],
-    },
-    ok: {
-      eyes: [
-        [4, 7],
-        [5, 7],
-        [10, 7],
-        [11, 7],
-      ],
-      mouth: [
-        [6, 10],
-        [7, 10],
-        [8, 10],
-        [9, 10],
-      ],
-      cheeks: [],
-    },
-    happy: {
-      eyes: [
-        [3, 7],
-        [4, 6],
-        [5, 7],
-        [10, 7],
-        [11, 6],
-        [12, 7],
-      ],
-      mouth: [
-        [6, 9],
-        [7, 11],
-        [8, 11],
-        [9, 9],
-      ],
-      cheeks: [
-        [2, 9],
-        [3, 9],
-        [12, 9],
-        [13, 9],
-      ],
-    },
+  colors: {"o": "#634a40", "b": "#be906c", "s": "#996d54", "l": "#dfb693", "a": "#f5e4c5", "c": "#d38a80", "e": "#493b37", "h": "#fff9ea", "t": "#93b4c4"},
+  sadColors: {"o": "#5e5250", "b": "#ad9c91", "s": "#8c7c76", "l": "#cfc3b5", "a": "#f5e4c5", "c": "#bba0a5", "e": "#493b37", "h": "#fff9ea", "t": "#9cbccc"},
+  rows: {
+    sad: [
+      "................................",
+      "................................",
+      "......oooooo....oooooo..........",
+      "......oooooo....oooooo..........",
+      "....oobbbboo....oobbbboo........",
+      "....oobbbboo....oobbbboo........",
+      "....oobbbboo....oobbbboo........",
+      "....oobbbboo....oobbbboo........",
+      "..oobbbbbbbbbbbbbbbbbbbboo......",
+      "..oobbbbbbbbbbbbbbbbbbbboo......",
+      "..oobbbbbbbbbbbbbbbbbbbboo......",
+      "..oobbbbbbbbbbbbbbbbbbbboo......",
+      "oobbbbbbbbbbbbbbbbbbbbbbbboo....",
+      "oobbbbbbbbbbbbbbbbbbbbbbbboo....",
+      "oobbbbbbeebbbbbbbbbbbbeebboo....",
+      "oobbbbbbeebbbbbbbbbbbbeebboo....",
+      "oobbbbbbbbeebbbbbbbbeebbbboo....",
+      "oobbbbbbbbeebbbbbbbbeebbbboo....",
+      "oobbbbbbbbbbbbbbbbbbbbbbbboo....",
+      "oobbbbbbbbbbbbbbbbbbbbbbbboo....",
+      "..oobbbbbbbbbbbbbbbbbbbboo......",
+      "..oobbbbbbbbbbbbbbbbbbbboo......",
+      "..oobbbbbbbbbboooobbbbbboo......",
+      "..oobbbbbbbbbboooobbbbbboo......",
+      "....oobbbbbboobbbboobboo........",
+      "....oobbbbbboobbbboobboo........",
+      "....oobbbbbbbbbbbbbbbboo........",
+      "....oobbbbbbbbbbbbbbbboo........",
+      "......oooooooo....oooo..........",
+      "......oooooooo....oooo..........",
+      "................................",
+      "................................",
+    ],
+    ok: [
+      "................................",
+      "................................",
+      "......oooooo....oooooo..........",
+      "......oooooo....oooooo..........",
+      "....oobbbboo....oobbbboo........",
+      "....oobbbboo....oobbbboo........",
+      "....oobbbboo....oobbbboo........",
+      "....oobbbboo....oobbbboo........",
+      "..oobbbbbbbbbbbbbbbbbbbboo......",
+      "..oobbbbbbbbbbbbbbbbbbbboo......",
+      "..oobbbbbbbbbbbbbbbbbbbboo......",
+      "..oobbbbbbbbbbbbbbbbbbbboo......",
+      "oobbbbbbbbbbbbbbbbbbbbbbbboo....",
+      "oobbbbbbbbbbbbbbbbbbbbbbbboo....",
+      "oobbbbbbeeeebbbbbbbbeeeebboo....",
+      "oobbbbbbeeeebbbbbbbbeeeebboo....",
+      "oobbbbbbbbbbbbbbbbbbbbbbbboo....",
+      "oobbbbbbbbbbbbbbbbbbbbbbbboo....",
+      "oobbbbbbbbbbbbbbbbbbbbbbbboo....",
+      "oobbbbbbbbbbbbbbbbbbbbbbbboo....",
+      "..oobbbbbbbboooooooobbbboo......",
+      "..oobbbbbbbboooooooobbbboo......",
+      "..oobbbbbbbbbbbbbbbbbbbboo......",
+      "..oobbbbbbbbbbbbbbbbbbbboo......",
+      "....oobbbbbbbbbbbbbbbboo........",
+      "....oobbbbbbbbbbbbbbbboo........",
+      "....oobbbbbbbbbbbbbbbboo........",
+      "....oobbbbbbbbbbbbbbbboo........",
+      "......oooooooo....oooo..........",
+      "......oooooooo....oooo..........",
+      "................................",
+      "................................",
+    ],
+    happy: [
+      "................................",
+      "................................",
+      "......oooooo....oooooo..........",
+      "......oooooo....oooooo..........",
+      "....oobbbboo....oobbbboo........",
+      "....oobbbboo....oobbbboo........",
+      "....oobbbboo....oobbbboo........",
+      "....oobbbboo....oobbbboo........",
+      "..oobbbbbbbbbbbbbbbbbbbboo......",
+      "..oobbbbbbbbbbbbbbbbbbbboo......",
+      "..oobbbbbbbbbbbbbbbbbbbboo......",
+      "..oobbbbbbbbbbbbbbbbbbbboo......",
+      "oobbbbbbeebbbbbbbbbbbbeebboo....",
+      "oobbbbbbeebbbbbbbbbbbbeebboo....",
+      "oobbbbeebbeebbbbbbbbeebbeeoo....",
+      "oobbbbeebbeebbbbbbbbeebbeeoo....",
+      "oobbbbbbbbbbbbbbbbbbbbbbbboo....",
+      "oobbbbbbbbbbbbbbbbbbbbbbbboo....",
+      "oobbccccbbbboobbbboobbbbcccc....",
+      "oobbccccbbbboobbbboobbbbcccc....",
+      "..oobbbbbbbbbbbbbbbbbbbboo......",
+      "..oobbbbbbbbbbbbbbbbbbbboo......",
+      "..oobbbbbbbbbboooobbbbbboo......",
+      "..oobbbbbbbbbboooobbbbbboo......",
+      "....oobbbbbbbbbbbbbbbboo........",
+      "....oobbbbbbbbbbbbbbbboo........",
+      "....oobbbbbbbbbbbbbbbboo........",
+      "....oobbbbbbbbbbbbbbbboo........",
+      "......oooooooo....oooo..........",
+      "......oooooooo....oooo..........",
+      "................................",
+      "................................",
+    ],
   },
 };
 
-// 4. Coelhinho
 const COELHO_SPRITE: SpriteDefinition = {
-  colors: {
-    k: "#27252a",
-    g: "#f5efe6",
-    e: "#ef9fb4", // interior das orelhas
-    l: "#ffffff",
-    h: "#fcf9f4",
-    b: "#e8809c",
-  },
-  rows: [
-    "..kk......kk....",
-    ".keek....keek...",
-    ".keek....keek...",
-    ".keek....keek...",
-    ".keek....keek...",
-    ".kggk....kggk...",
-    ".kggggkkggggk...",
-    "kggggggggggggk..",
-    "kgglgggggggglk..",
-    "kggggggggggggk..",
-    "kgggghhhhggggk..",
-    ".kggggggggggk...",
-    ".kggggggggggk...",
-    "..kggggggggk....",
-    "..kkkk..kkkk....",
-    "................",
-  ],
-  faces: {
-    sad: {
-      eyes: [
-        [4, 8],
-        [5, 9],
-        [10, 9],
-        [11, 8],
-      ],
-      mouth: [
-        [7, 12],
-        [8, 12],
-        [6, 13],
-        [9, 13],
-      ],
-      cheeks: [],
-    },
-    ok: {
-      eyes: [
-        [4, 9],
-        [5, 9],
-        [10, 9],
-        [11, 9],
-      ],
-      mouth: [
-        [6, 11],
-        [7, 12],
-        [8, 12],
-        [9, 11],
-      ],
-      cheeks: [],
-    },
-    happy: {
-      eyes: [
-        [3, 9],
-        [4, 8],
-        [5, 9],
-        [10, 9],
-        [11, 8],
-        [12, 9],
-      ],
-      mouth: [
-        [6, 11],
-        [7, 12],
-        [8, 12],
-        [9, 11],
-      ],
-      cheeks: [
-        [2, 10],
-        [3, 10],
-        [12, 10],
-        [13, 10],
-      ],
-    },
+  colors: {"o": "#735768", "b": "#e7c5d1", "s": "#b99eae", "l": "#f8e2e6", "a": "#d195ac", "c": "#d7889c", "e": "#574453", "h": "#fffaf2", "t": "#9cb9cc"},
+  sadColors: {"o": "#685d70", "b": "#c8bdce", "s": "#a69bae", "l": "#e4dae6", "a": "#d195ac", "c": "#bba0a5", "e": "#574453", "h": "#fffaf2", "t": "#9cbccc"},
+  rows: {
+    sad: [
+      "....oooo............oooo........",
+      "....oooo............oooo........",
+      "..oobbbboo........oobbbboo......",
+      "..oobbbboo........oobbbboo......",
+      "..oobbbboo........oobbbboo......",
+      "..oobbbboo........oobbbboo......",
+      "..oobbbboo........oobbbboo......",
+      "..oobbbboo........oobbbboo......",
+      "..oobbbboo........oobbbboo......",
+      "..oobbbboo........oobbbboo......",
+      "..oobbbboo........oobbbboo......",
+      "..oobbbboo........oobbbboo......",
+      "..oobbbbbbbboooobbbbbbbboo......",
+      "..oobbbbbbbboooobbbbbbbboo......",
+      "oobbbbbbbbbbbbbbbbbbbbbbbboo....",
+      "oobbbbbbbbbbbbbbbbbbbbbbbboo....",
+      "oobbbbbbeebbbbbbbbbbbbeebboo....",
+      "oobbbbbbeebbbbbbbbbbbbeebboo....",
+      "oobbbbbbbbeebbbbbbbbeebbbboo....",
+      "oobbbbbbbbeebbbbbbbbeebbbboo....",
+      "oobbbbbbbbbbbbbbbbbbbbbbbboo....",
+      "oobbbbbbbbbbbbbbbbbbbbbbbboo....",
+      "..oobbbbbbbbbbbbbbbbbbbboo......",
+      "..oobbbbbbbbbbbbbbbbbbbboo......",
+      "..oobbbbbbbbbboooobbbbbboo......",
+      "..oobbbbbbbbbboooobbbbbboo......",
+      "....oobbbbbboobbbboobboo........",
+      "....oobbbbbboobbbboobboo........",
+      "....oooooooo....oooooooo........",
+      "....oooooooo....oooooooo........",
+      "................................",
+      "................................",
+    ],
+    ok: [
+      "....oooo............oooo........",
+      "....oooo............oooo........",
+      "..oobbbboo........oobbbboo......",
+      "..oobbbboo........oobbbboo......",
+      "..oobbbboo........oobbbboo......",
+      "..oobbbboo........oobbbboo......",
+      "..oobbbboo........oobbbboo......",
+      "..oobbbboo........oobbbboo......",
+      "..oobbbboo........oobbbboo......",
+      "..oobbbboo........oobbbboo......",
+      "..oobbbboo........oobbbboo......",
+      "..oobbbboo........oobbbboo......",
+      "..oobbbbbbbboooobbbbbbbboo......",
+      "..oobbbbbbbboooobbbbbbbboo......",
+      "oobbbbbbbbbbbbbbbbbbbbbbbboo....",
+      "oobbbbbbbbbbbbbbbbbbbbbbbboo....",
+      "oobbbbbbbbbbbbbbbbbbbbbbbboo....",
+      "oobbbbbbbbbbbbbbbbbbbbbbbboo....",
+      "oobbbbbbeeeebbbbbbbbeeeebboo....",
+      "oobbbbbbeeeebbbbbbbbeeeebboo....",
+      "oobbbbbbbbbbbbbbbbbbbbbbbboo....",
+      "oobbbbbbbbbbbbbbbbbbbbbbbboo....",
+      "..oobbbbbbbboobbbboobbbboo......",
+      "..oobbbbbbbboobbbboobbbboo......",
+      "..oobbbbbbbbbboooobbbbbboo......",
+      "..oobbbbbbbbbboooobbbbbboo......",
+      "....oobbbbbbbbbbbbbbbboo........",
+      "....oobbbbbbbbbbbbbbbboo........",
+      "....oooooooo....oooooooo........",
+      "....oooooooo....oooooooo........",
+      "................................",
+      "................................",
+    ],
+    happy: [
+      "....oooo............oooo........",
+      "....oooo............oooo........",
+      "..oobbbboo........oobbbboo......",
+      "..oobbbboo........oobbbboo......",
+      "..oobbbboo........oobbbboo......",
+      "..oobbbboo........oobbbboo......",
+      "..oobbbboo........oobbbboo......",
+      "..oobbbboo........oobbbboo......",
+      "..oobbbboo........oobbbboo......",
+      "..oobbbboo........oobbbboo......",
+      "..oobbbboo........oobbbboo......",
+      "..oobbbboo........oobbbboo......",
+      "..oobbbbbbbboooobbbbbbbboo......",
+      "..oobbbbbbbboooobbbbbbbboo......",
+      "oobbbbbbbbbbbbbbbbbbbbbbbboo....",
+      "oobbbbbbbbbbbbbbbbbbbbbbbboo....",
+      "oobbbbbbeebbbbbbbbbbbbeebboo....",
+      "oobbbbbbeebbbbbbbbbbbbeebboo....",
+      "oobbbbeebbeebbbbbbbbeebbeeoo....",
+      "oobbbbeebbeebbbbbbbbeebbeeoo....",
+      "oobbccccbbbbbbbbbbbbbbbbcccc....",
+      "oobbccccbbbbbbbbbbbbbbbbcccc....",
+      "..oobbbbbbbboobbbboobbbboo......",
+      "..oobbbbbbbboobbbboobbbboo......",
+      "..oobbbbbbbbbboooobbbbbboo......",
+      "..oobbbbbbbbbboooobbbbbboo......",
+      "....oobbbbbbbbbbbbbbbboo........",
+      "....oobbbbbbbbbbbbbbbboo........",
+      "....oooooooo....oooooooo........",
+      "....oooooooo....oooooooo........",
+      "................................",
+      "................................",
+    ],
   },
 };
 
-// 5. Dragãozinho
 const DRAGAO_SPRITE: SpriteDefinition = {
-  colors: {
-    k: "#132f26",
-    g: "#3fa789",
-    h: "#f3a847", // chifres / barriga dourada
-    w: "#6fd2b5", // asinhas
-    l: "#92e4cc",
-    b: "#de695b",
-  },
-  rows: [
-    "...kk....kk.....",
-    "..khhk..khhk....",
-    "..khhk..khhk....",
-    "..kggggggggk....",
-    ".kggggggggggk...",
-    "kggggggggggggk..",
-    "kgglgggggggglk..",
-    "kggggggggggggk..",
-    "kwwggggggggwwk..",
-    "kwwghhhhhhwwk...",
-    ".kghhhhhhhgk....",
-    ".kghhhhhhhgk....",
-    "..kggggggggk....",
-    "..kggggggggk....",
-    "...kkk..kkk.....",
-    "................",
-  ],
-  faces: {
-    sad: {
-      eyes: [
-        [4, 6],
-        [5, 7],
-        [10, 7],
-        [11, 6],
-      ],
-      mouth: [
-        [6, 10],
-        [7, 9],
-        [8, 9],
-        [9, 10],
-      ],
-      cheeks: [],
-    },
-    ok: {
-      eyes: [
-        [4, 7],
-        [5, 7],
-        [10, 7],
-        [11, 7],
-      ],
-      mouth: [
-        [6, 9],
-        [7, 9],
-        [8, 9],
-        [9, 9],
-      ],
-      cheeks: [],
-    },
-    happy: {
-      eyes: [
-        [3, 7],
-        [4, 6],
-        [5, 7],
-        [10, 7],
-        [11, 6],
-        [12, 7],
-      ],
-      mouth: [
-        [6, 8],
-        [7, 9],
-        [8, 9],
-        [9, 8],
-      ],
-      cheeks: [
-        [2, 8],
-        [3, 8],
-        [12, 8],
-        [13, 8],
-      ],
-    },
+  colors: {"o": "#4f506e", "b": "#aaa6d5", "s": "#8283b4", "l": "#cbc7e9", "a": "#e6ca8b", "c": "#d59eb8", "e": "#41435b", "h": "#fff9e9", "t": "#9ebecd"},
+  sadColors: {"o": "#515b72", "b": "#a3aec8", "s": "#7e8da9", "l": "#c7cfe0", "a": "#e6ca8b", "c": "#bba0a5", "e": "#41435b", "h": "#fff9e9", "t": "#9cbccc"},
+  rows: {
+    sad: [
+      "......oooo........oooo..........",
+      "......oooo........oooo..........",
+      "....oobbbboo....oobbbboo........",
+      "....oobbbboo....oobbbboo........",
+      "....oobbbboo....oobbbboo........",
+      "....oobbbboo....oobbbboo........",
+      "....oobbbbbbbbbbbbbbbboo........",
+      "....oobbbbbbbbbbbbbbbboo........",
+      "..oobbbbbbbbbbbbbbbbbbbboo......",
+      "..oobbbbbbbbbbbbbbbbbbbboo......",
+      "oobbbbbbbbbbbbbbbbbbbbbbbboo....",
+      "oobbbbbbbbbbbbbbbbbbbbbbbboo....",
+      "oobbbbbbeebbbbbbbbbbbbeebboo....",
+      "oobbbbbbeebbbbbbbbbbbbeebboo....",
+      "oobbbbbbbbeebbbbbbbbeebbbboo....",
+      "oobbbbbbbbeebbbbbbbbeebbbboo....",
+      "oobbbbbbbbbbbbbbbbbbbbbbbboo....",
+      "oobbbbbbbbbbbbbbbbbbbbbbbboo....",
+      "oobbbbbbbbbbbboooobbbbbboo......",
+      "oobbbbbbbbbbbboooobbbbbboo......",
+      "..oobbbbbbbboobbbboobboo........",
+      "..oobbbbbbbboobbbboobboo........",
+      "..oobbbbbbbbbbbbbbbbbboo........",
+      "..oobbbbbbbbbbbbbbbbbboo........",
+      "....oobbbbbbbbbbbbbbbboo........",
+      "....oobbbbbbbbbbbbbbbboo........",
+      "....oobbbbbbbbbbbbbbbboo........",
+      "....oobbbbbbbbbbbbbbbboo........",
+      "......oooooo....oooooo..........",
+      "......oooooo....oooooo..........",
+      "................................",
+      "................................",
+    ],
+    ok: [
+      "......oooo........oooo..........",
+      "......oooo........oooo..........",
+      "....oobbbboo....oobbbboo........",
+      "....oobbbboo....oobbbboo........",
+      "....oobbbboo....oobbbboo........",
+      "....oobbbboo....oobbbboo........",
+      "....oobbbbbbbbbbbbbbbboo........",
+      "....oobbbbbbbbbbbbbbbboo........",
+      "..oobbbbbbbbbbbbbbbbbbbboo......",
+      "..oobbbbbbbbbbbbbbbbbbbboo......",
+      "oobbbbbbbbbbbbbbbbbbbbbbbboo....",
+      "oobbbbbbbbbbbbbbbbbbbbbbbboo....",
+      "oobbbbbbbbbbbbbbbbbbbbbbbboo....",
+      "oobbbbbbbbbbbbbbbbbbbbbbbboo....",
+      "oobbbbbbeeeebbbbbbbbeeeebboo....",
+      "oobbbbbbeeeebbbbbbbbeeeebboo....",
+      "oobbbbbbbbbbbbbbbbbbbbbbbboo....",
+      "oobbbbbbbbbbbbbbbbbbbbbbbboo....",
+      "oobbbbbbbbbboooooooobbbboo......",
+      "oobbbbbbbbbboooooooobbbboo......",
+      "..oobbbbbbbbbbbbbbbbbboo........",
+      "..oobbbbbbbbbbbbbbbbbboo........",
+      "..oobbbbbbbbbbbbbbbbbboo........",
+      "..oobbbbbbbbbbbbbbbbbboo........",
+      "....oobbbbbbbbbbbbbbbboo........",
+      "....oobbbbbbbbbbbbbbbboo........",
+      "....oobbbbbbbbbbbbbbbboo........",
+      "....oobbbbbbbbbbbbbbbboo........",
+      "......oooooo....oooooo..........",
+      "......oooooo....oooooo..........",
+      "................................",
+      "................................",
+    ],
+    happy: [
+      "......oooo........oooo..........",
+      "......oooo........oooo..........",
+      "....oobbbboo....oobbbboo........",
+      "....oobbbboo....oobbbboo........",
+      "....oobbbboo....oobbbboo........",
+      "....oobbbboo....oobbbboo........",
+      "....oobbbbbbbbbbbbbbbboo........",
+      "....oobbbbbbbbbbbbbbbboo........",
+      "..oobbbbbbbbbbbbbbbbbbbboo......",
+      "..oobbbbbbbbbbbbbbbbbbbboo......",
+      "oobbbbbbbbbbbbbbbbbbbbbbbboo....",
+      "oobbbbbbbbbbbbbbbbbbbbbbbboo....",
+      "oobbbbbbeebbbbbbbbbbbbeebboo....",
+      "oobbbbbbeebbbbbbbbbbbbeebboo....",
+      "oobbbbeebbeebbbbbbbbeebbeeoo....",
+      "oobbbbeebbeebbbbbbbbeebbeeoo....",
+      "oobbccccbbbboobbbboobbbbcccc....",
+      "oobbccccbbbboobbbboobbbbcccc....",
+      "oobbbbbbbbbbbboooobbbbbboo......",
+      "oobbbbbbbbbbbboooobbbbbboo......",
+      "..oobbbbbbbbbbbbbbbbbboo........",
+      "..oobbbbbbbbbbbbbbbbbboo........",
+      "..oobbbbbbbbbbbbbbbbbboo........",
+      "..oobbbbbbbbbbbbbbbbbboo........",
+      "....oobbbbbbbbbbbbbbbboo........",
+      "....oobbbbbbbbbbbbbbbboo........",
+      "....oobbbbbbbbbbbbbbbboo........",
+      "....oobbbbbbbbbbbbbbbboo........",
+      "......oooooo....oooooo..........",
+      "......oooooo....oooooo..........",
+      "................................",
+      "................................",
+    ],
   },
 };
 
-// 6. Brotinho (Planta / Slime)
 const PLANTA_SPRITE: SpriteDefinition = {
-  colors: {
-    k: "#1b3c1e",
-    g: "#68bc56",
-    e: "#97dc79", // folha topo
-    l: "#c1f0ae",
-    f: "#f27163", // flor / bochecha
-    b: "#e26155",
-  },
-  rows: [
-    "......kkk.......",
-    ".....keekk......",
-    "....keeeekk.....",
-    ".....kkk.k......",
-    "....kggggk......",
-    "..kggggggggk....",
-    ".kggggggggggk...",
-    "kgglgggggggggk..",
-    "kgggggggggggggk.",
-    "kgggggggggggggk.",
-    "kgggggggggggggk.",
-    ".kgggggggggggk..",
-    ".kgggggggggggk..",
-    "..kgggggggggk...",
-    "...kkkkkkkkk....",
-    "................",
-  ],
-  faces: {
-    sad: {
-      eyes: [
-        [4, 8],
-        [5, 9],
-        [9, 9],
-        [10, 8],
-      ],
-      mouth: [
-        [6, 12],
-        [7, 11],
-        [8, 11],
-      ],
-      cheeks: [],
-    },
-    ok: {
-      eyes: [
-        [4, 9],
-        [5, 9],
-        [9, 9],
-        [10, 9],
-      ],
-      mouth: [
-        [6, 11],
-        [7, 11],
-        [8, 11],
-      ],
-      cheeks: [],
-    },
-    happy: {
-      eyes: [
-        [3, 9],
-        [4, 8],
-        [5, 9],
-        [9, 9],
-        [10, 8],
-        [11, 9],
-      ],
-      mouth: [
-        [6, 11],
-        [7, 12],
-        [8, 11],
-      ],
-      cheeks: [
-        [2, 10],
-        [3, 10],
-        [11, 10],
-        [12, 10],
-      ],
-    },
+  colors: {"o": "#385348", "b": "#89b58c", "s": "#649371", "l": "#b6d3a2", "a": "#cc9074", "c": "#ae6b62", "e": "#30473e", "h": "#fff4dc", "t": "#9bbec6"},
+  sadColors: {"o": "#43594f", "b": "#98b3a5", "s": "#79988a", "l": "#c1d0bc", "a": "#cc9074", "c": "#bba0a5", "e": "#30473e", "h": "#fff4dc", "t": "#9cbccc"},
+  rows: {
+    sad: [
+      "............oooooo..............",
+      "............oooooo..............",
+      "..........oobbbboooo............",
+      "..........oobbbboooo............",
+      "........oobbbbbbbboooo..........",
+      "........oobbbbbbbboooo..........",
+      "..........oooooo..oo............",
+      "..........oooooo..oo............",
+      "........oobbbbbbbboo............",
+      "........oobbbbbbbboo............",
+      "....oobbbbbbbbbbbbbbbboo........",
+      "....oobbbbbbbbbbbbbbbboo........",
+      "..oobbbbbbbbbbbbbbbbbbbboo......",
+      "..oobbbbbbbbbbbbbbbbbbbboo......",
+      "oobbbbbbbbbbbbbbbbbbbbbbbboo....",
+      "oobbbbbbbbbbbbbbbbbbbbbbbboo....",
+      "oobbbbbbeebbbbbbbbbbeebbbbbboo..",
+      "oobbbbbbeebbbbbbbbbbeebbbbbboo..",
+      "oobbbbbbbbeebbbbbbeebbbbbbbboo..",
+      "oobbbbbbbbeebbbbbbeebbbbbbbboo..",
+      "oobbbbbbbbbbbbbbbbbbbbbbbbbboo..",
+      "oobbbbbbbbbbbbbbbbbbbbbbbbbboo..",
+      "..oobbbbbbbbbboooobbbbbbbboo....",
+      "..oobbbbbbbbbboooobbbbbbbboo....",
+      "..oobbbbbbbboobbbbbbbbbbbboo....",
+      "..oobbbbbbbboobbbbbbbbbbbboo....",
+      "....oobbbbbbbbbbbbbbbbbboo......",
+      "....oobbbbbbbbbbbbbbbbbboo......",
+      "......oooooooooooooooooo........",
+      "......oooooooooooooooooo........",
+      "................................",
+      "................................",
+    ],
+    ok: [
+      "............oooooo..............",
+      "............oooooo..............",
+      "..........oobbbboooo............",
+      "..........oobbbboooo............",
+      "........oobbbbbbbboooo..........",
+      "........oobbbbbbbboooo..........",
+      "..........oooooo..oo............",
+      "..........oooooo..oo............",
+      "........oobbbbbbbboo............",
+      "........oobbbbbbbboo............",
+      "....oobbbbbbbbbbbbbbbboo........",
+      "....oobbbbbbbbbbbbbbbboo........",
+      "..oobbbbbbbbbbbbbbbbbbbboo......",
+      "..oobbbbbbbbbbbbbbbbbbbboo......",
+      "oobbbbbbbbbbbbbbbbbbbbbbbboo....",
+      "oobbbbbbbbbbbbbbbbbbbbbbbboo....",
+      "oobbbbbbbbbbbbbbbbbbbbbbbbbboo..",
+      "oobbbbbbbbbbbbbbbbbbbbbbbbbboo..",
+      "oobbbbbbeeeebbbbbbeeeebbbbbboo..",
+      "oobbbbbbeeeebbbbbbeeeebbbbbboo..",
+      "oobbbbbbbbbbbbbbbbbbbbbbbbbboo..",
+      "oobbbbbbbbbbbbbbbbbbbbbbbbbboo..",
+      "..oobbbbbbbboooooobbbbbbbboo....",
+      "..oobbbbbbbboooooobbbbbbbboo....",
+      "..oobbbbbbbbbbbbbbbbbbbbbboo....",
+      "..oobbbbbbbbbbbbbbbbbbbbbboo....",
+      "....oobbbbbbbbbbbbbbbbbboo......",
+      "....oobbbbbbbbbbbbbbbbbboo......",
+      "......oooooooooooooooooo........",
+      "......oooooooooooooooooo........",
+      "................................",
+      "................................",
+    ],
+    happy: [
+      "............oooooo..............",
+      "............oooooo..............",
+      "..........oobbbboooo............",
+      "..........oobbbboooo............",
+      "........oobbbbbbbboooo..........",
+      "........oobbbbbbbboooo..........",
+      "..........oooooo..oo............",
+      "..........oooooo..oo............",
+      "........oobbbbbbbboo............",
+      "........oobbbbbbbboo............",
+      "....oobbbbbbbbbbbbbbbboo........",
+      "....oobbbbbbbbbbbbbbbboo........",
+      "..oobbbbbbbbbbbbbbbbbbbboo......",
+      "..oobbbbbbbbbbbbbbbbbbbboo......",
+      "oobbbbbbbbbbbbbbbbbbbbbbbboo....",
+      "oobbbbbbbbbbbbbbbbbbbbbbbboo....",
+      "oobbbbbbeebbbbbbbbbbeebbbbbboo..",
+      "oobbbbbbeebbbbbbbbbbeebbbbbboo..",
+      "oobbbbeebbeebbbbbbeebbeebbbboo..",
+      "oobbbbeebbeebbbbbbeebbeebbbboo..",
+      "oobbccccbbbbbbbbbbbbbbccccbboo..",
+      "oobbccccbbbbbbbbbbbbbbccccbboo..",
+      "..oobbbbbbbboobboobbbbbbbboo....",
+      "..oobbbbbbbboobboobbbbbbbboo....",
+      "..oobbbbbbbbbboobbbbbbbbbboo....",
+      "..oobbbbbbbbbboobbbbbbbbbboo....",
+      "....oobbbbbbbbbbbbbbbbbboo......",
+      "....oobbbbbbbbbbbbbbbbbboo......",
+      "......oooooooooooooooooo........",
+      "......oooooooooooooooooo........",
+      "................................",
+      "................................",
+    ],
   },
 };
 
-export const SPRITES: Record<PetKind, SpriteDefinition> = {
+export const SPRITES: Readonly<Record<PetKind, SpriteDefinition>> = {
   original: ORIGINAL_SPRITE,
   gato: GATO_SPRITE,
   cachorro: CACHORRO_SPRITE,
@@ -551,84 +693,23 @@ export const SPRITES: Record<PetKind, SpriteDefinition> = {
   planta: PLANTA_SPRITE,
 };
 
-export function PetSprite({
-  kind = "original",
-  mood,
-  size,
-  className,
-  label,
-}: PetSpriteProps & { kind?: PetKind; mood: Mood }) {
+export function PetSprite({ kind = "original", mood, size, className, label }: PetSpriteProps & { kind?: PetKind; mood: Mood }) {
   const pixels = normalizeSize(size);
   const def = SPRITES[kind] ?? SPRITES.original;
-  const face = def.faces[mood] ?? def.faces.ok;
-  const outlineColor = def.colors.k ?? "#203e32";
-  const blushColor = def.colors.b ?? "#d58068";
-
-  return (
-    <svg
-      className={className}
-      width={pixels}
-      height={pixels}
-      viewBox="0 0 16 16"
-      role={label ? "img" : undefined}
-      aria-label={label}
-      aria-hidden={label ? undefined : "true"}
-      focusable="false"
-      shapeRendering="crispEdges"
-    >
-      {def.rows.flatMap((row, y) =>
-        [...row].map((cell, x) => {
-          const fill = def.colors[cell];
-          return fill ? (
-            <PixelRect key={`body-${x}-${y}`} x={x} y={y} fill={fill} />
-          ) : null;
-        }),
-      )}
-      {face.eyes.map(([x, y]) => (
-        <PixelRect key={`eye-${x}-${y}`} x={x} y={y} fill={outlineColor} />
-      ))}
-      {face.mouth.map(([x, y]) => (
-        <PixelRect key={`mouth-${x}-${y}`} x={x} y={y} fill={outlineColor} />
-      ))}
-      {face.cheeks.map(([x, y]) => (
-        <PixelRect key={`cheek-${x}-${y}`} x={x} y={y} fill={blushColor} />
-      ))}
-    </svg>
-  );
+  const rows = def.rows[mood] ?? def.rows.ok;
+  const colors = mood === "sad" ? def.sadColors : def.colors;
+  const runs = horizontalRuns(rows);
+  const eyes = (run: PixelRun) => run.key === "e" || run.key === "h";
+  const rect = (run: PixelRun) => <rect key={`${run.x}-${run.y}`} x={run.x} y={run.y} width={run.width} height={1} fill={colors[run.key]} />;
+  return <svg className={className} width={pixels} height={pixels} viewBox="0 0 32 32"
+    role={label ? "img" : undefined} aria-label={label} aria-hidden={label ? undefined : "true"}
+    focusable="false" shapeRendering="crispEdges" data-pet-kind={kind} data-pet-mood={mood}>
+    <g className="pet-body">
+      {runs.filter(run => !eyes(run)).map(rect)}
+      <g className="pet-eyes">{runs.filter(eyes).map(rect)}</g>
+    </g>
+  </svg>;
 }
-
-export function PetSad({ size, className, label }: PetSpriteProps) {
-  return (
-    <PetSprite
-      kind="original"
-      mood="sad"
-      size={size}
-      className={className}
-      label={label}
-    />
-  );
-}
-
-export function PetOk({ size, className, label }: PetSpriteProps) {
-  return (
-    <PetSprite
-      kind="original"
-      mood="ok"
-      size={size}
-      className={className}
-      label={label}
-    />
-  );
-}
-
-export function PetHappy({ size, className, label }: PetSpriteProps) {
-  return (
-    <PetSprite
-      kind="original"
-      mood="happy"
-      size={size}
-      className={className}
-      label={label}
-    />
-  );
-}
+export function PetSad(props: PetSpriteProps) { return <PetSprite {...props} kind="original" mood="sad" />; }
+export function PetOk(props: PetSpriteProps) { return <PetSprite {...props} kind="original" mood="ok" />; }
+export function PetHappy(props: PetSpriteProps) { return <PetSprite {...props} kind="original" mood="happy" />; }

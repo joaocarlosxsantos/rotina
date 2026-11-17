@@ -1,5 +1,5 @@
 import type { petMood } from "../lib/rules";
-import { type PetKind, DEFAULT_PET_KIND } from "../lib/pets";
+import { type PetKind, DEFAULT_PET_KIND, PET_CATALOG } from "../lib/pets";
 import { PetHappy, PetOk, PetSad, PetSprite, type Mood } from "./pet-sprites";
 
 type PetMood = ReturnType<typeof petMood>;
@@ -31,7 +31,7 @@ export function Pet({
     return assertNever(mood);
   }
 
-  const label = MOOD_LABELS[mood];
+  const label = `${PET_CATALOG[kind].name} — ${MOOD_LABELS[mood]}`;
   const className = `pet pet-${mood}`;
 
   // Para o pet padrão (original), preserva os componentes exatos esperados pelos testes existentes

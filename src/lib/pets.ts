@@ -21,12 +21,12 @@ export const PET_CATALOG: Record<PetKind, PetDefinition> = {
   original: {
     id: "original",
     name: "Ursinho",
-    description: "O companheiro clássico e resiliente da sua jornada.",
+    description: "Orelhinhas redondas, abraço de musgo e um coração tranquilo.",
   },
   gato: {
     id: "gato",
     name: "Gatinho",
-    description: "Curioso, calmo e focado no seu próprio ritmo.",
+    description: "Um pequeno caramelo de bigodes, curioso no seu próprio ritmo.",
   },
   cachorro: {
     id: "cachorro",

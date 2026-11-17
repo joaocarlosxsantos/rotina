@@ -22,9 +22,9 @@ const TERMS: Record<PetMood, string> = {
 };
 
 const CASES = [
-  { mood: "feliz", Sprite: PetHappy, label: "Pet feliz" },
-  { mood: "ok", Sprite: PetOk, label: "Pet de boa" },
-  { mood: "triste", Sprite: PetSad, label: "Pet triste" },
+  { mood: "feliz", Sprite: PetHappy, label: "Ursinho — Pet feliz" },
+  { mood: "ok", Sprite: PetOk, label: "Ursinho — Pet de boa" },
+  { mood: "triste", Sprite: PetSad, label: "Ursinho — Pet triste" },
 ] as const;
 
 function renderPet(mood: PetMood): string {
@@ -108,7 +108,7 @@ test("Rótulo acessível usa o mesmo termo do texto visível", () => {
   >) {
     assert.ok(page.includes(`"${term}"`), `Termo visível ausente: ${term}`);
     assert.ok(
-      renderPet(mood).includes(`aria-label="Pet ${term.toLowerCase()}"`),
+      renderPet(mood).includes(`aria-label="Ursinho — Pet ${term.toLowerCase()}"`),
     );
   }
 });
@@ -126,7 +126,7 @@ test("Humor de petMood chega ao rótulo nos limites de progresso", () => {
   for (const { done, mood } of limits) {
     assert.equal(petMood(done, 100), mood);
     assert.ok(
-      renderPet(mood).includes(`aria-label="Pet ${TERMS[mood].toLowerCase()}"`),
+      renderPet(mood).includes(`aria-label="Ursinho — Pet ${TERMS[mood].toLowerCase()}"`),
     );
   }
 });
@@ -165,7 +165,7 @@ test("Animações do pet usam só transform e reduce zera tudo", () => {
 
   assert.deepEqual(
     frames.map((frame) => frame.name),
-    ["pet-hop", "pet-sway", "pet-shrink"],
+    ["pet-hop", "pet-sway", "pet-shrink", "pet-blink"],
   );
 
   for (const frame of frames) {

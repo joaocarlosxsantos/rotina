@@ -10,7 +10,7 @@ import {
   parsePetKind,
   type PetKind,
 } from "../src/lib/pets";
-import { PetSprite, SPRITES } from "../src/app/pet-sprites";
+import { PetSprite, SPRITES, horizontalRuns } from "../src/app/pet-sprites";
 import { Pet } from "../src/app/pet";
 import { Header } from "../src/app/header";
 import { getUserPet, setUserPet, dashboard } from "../src/lib/store";
@@ -25,7 +25,7 @@ const OTHER_USER = {
   name: "Usuário B",
 };
 
-test("Catálogo de pets contém 6 companheiros e cada um possui 3 humores com SVG 16x16 válido", () => {
+test("Catálogo de pets contém 6 companheiros e cada um possui 3 humores com SVG 32x32 válido", () => {
   assert.equal(PET_KINDS.length, 6, "Devem existir exatamente 6 companheiros no catálogo");
   assert.deepEqual(
     PET_KINDS,
@@ -43,17 +43,24 @@ test("Catálogo de pets contém 6 companheiros e cada um possui 3 humores com SV
 
     const spriteDef = SPRITES[kind];
     assert.ok(spriteDef, `Companheiro ${kind} deve ter SPRITES definido`);
-    assert.equal(spriteDef.rows.length, 16, `Companheiro ${kind} deve ter 16 linhas`);
-    for (const row of spriteDef.rows) {
-      assert.equal(row.length, 16, `Companheiro ${kind} deve ter 16 colunas`);
+    assert.deepEqual(Object.keys(spriteDef.rows), ["sad", "ok", "happy"]);
+    for (const palette of [spriteDef.colors, spriteDef.sadColors]) {
+      assert.ok(Object.keys(palette).length <= 10);
+      assert.ok(Object.values(palette).every(color => /^#[0-9a-f]{6}$/i.test(color) && color !== "#000000"));
     }
-
+    assert.notDeepEqual(spriteDef.colors, spriteDef.sadColors);
+    assert.equal(new Set(moods.map(mood => spriteDef.rows[mood].join("\n"))).size, 3);
     for (const mood of moods) {
-      const face = spriteDef.faces[mood];
-      assert.ok(face, `Companheiro ${kind} deve ter rosto para o humor ${mood}`);
-      assert.ok(face.eyes.length > 0, `Companheiro ${kind} deve ter olhos para ${mood}`);
-      assert.ok(face.mouth.length > 0, `Companheiro ${kind} deve ter boca para ${mood}`);
-
+      const rows = spriteDef.rows[mood];
+      assert.equal(rows.length, 32);
+      assert.ok(rows.every(row => row.length === 32));
+      assert.ok([...rows.join("")].every(cell => cell === "." || cell in spriteDef.colors));
+      assert.ok(rows.some(row => row.includes("o")), "Contorno presente");
+      assert.ok(rows.some(row => row.includes("e")), "Olhos presentes");
+      const runs = horizontalRuns(rows);
+      const pixels = rows.join("").replaceAll(".", "").length;
+      assert.ok(runs.length < pixels, "Corridas devem reduzir os rects");
+      assert.equal(runs.reduce((sum, run) => sum + run.width, 0), pixels);
       const html = renderToStaticMarkup(
         React.createElement(PetSprite, {
           kind,
@@ -64,7 +71,7 @@ test("Catálogo de pets contém 6 companheiros e cada um possui 3 humores com SV
       );
 
       assert.ok(html.startsWith("<svg"), `Deve gerar elemento <svg> para ${kind} ${mood}`);
-      assert.ok(html.includes('viewBox="0 0 16 16"'), "Deve manter viewBox 16x16");
+      assert.ok(html.includes('viewBox="0 0 32 32"'), "Deve manter viewBox 32x32");
       assert.ok(html.includes('shape-rendering="crispEdges"'), "Deve preservar crispEdges");
       assert.ok(html.includes('role="img"'), "Deve ter role img");
       assert.ok(html.includes(`aria-label="${def.name} ${mood}"`), "Deve ter aria-label acessível");
@@ -78,19 +85,19 @@ test("Pet renderiza com o companheiro escolhido preservando o humor", () => {
       React.createElement(Pet, { mood: "feliz", kind }),
     );
     assert.ok(htmlFeliz.includes('class="pet pet-feliz"'));
-    assert.ok(htmlFeliz.includes('aria-label="Pet feliz"'));
+    assert.ok(htmlFeliz.includes(`aria-label="${PET_CATALOG[kind].name} — Pet feliz"`));
 
     const htmlOk = renderToStaticMarkup(
       React.createElement(Pet, { mood: "ok", kind }),
     );
     assert.ok(htmlOk.includes('class="pet pet-ok"'));
-    assert.ok(htmlOk.includes('aria-label="Pet de boa"'));
+    assert.ok(htmlOk.includes(`aria-label="${PET_CATALOG[kind].name} — Pet de boa"`));
 
     const htmlTriste = renderToStaticMarkup(
       React.createElement(Pet, { mood: "triste", kind }),
     );
     assert.ok(htmlTriste.includes('class="pet pet-triste"'));
-    assert.ok(htmlTriste.includes('aria-label="Pet triste"'));
+    assert.ok(htmlTriste.includes(`aria-label="${PET_CATALOG[kind].name} — Pet triste"`));
   }
 });
 

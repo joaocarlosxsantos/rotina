@@ -9,6 +9,7 @@
     "start": "next start --hostname 127.0.0.1",
     "test": "tsx --test --test-concurrency=1 tests/*.test.ts",
     "typecheck": "tsc --noEmit",
+    "pets:preview": "tsx scripts/pets-preview.tsx",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/migrate.ts"
   },
