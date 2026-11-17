@@ -31,12 +31,12 @@ export const PET_CATALOG: Record<PetKind, PetDefinition> = {
   cachorro: {
     id: "cachorro",
     name: "Cachorrinho",
-    description: "Alegre, leal e animado a cada pequena vitória.",
+    description: "Orelhas de veludo e uma pintinha de café para celebrar suas vitórias.",
   },
   coelho: {
     id: "coelho",
     name: "Coelhinho",
-    description: "Ágil e atento, pronto para pular de tarefa em tarefa.",
+    description: "Um algodão rosado de orelhas compridas e passos delicados.",
   },
   dragao: {
     id: "dragao",
