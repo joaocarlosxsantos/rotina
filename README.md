@@ -78,3 +78,56 @@ O migrator prepara o schema/tabela de controle antes da transação que aplica o
 Autorização por usuário em todas as operações de produto; queries parametrizadas, valores/data/pontos do servidor e texto escapado por React. Ações usam verificação de origem do Next.js e corpo limitado a 32 KB. Falhas retornam mensagens sem credenciais. Ainda é preciso configurar/validar rate limits de login/cadastro no provedor/plataforma; não há limiter distribuído próprio. Login inexistente e senha incorreta compartilham mensagem, mas cadastro e comportamento do provedor ainda podem permitir enumeração de e-mail. Não liberar produção antes do QA remoto autorizado.
 
 `next.config.ts` mantém arquivos `.env*`, dados, `.maestri` e documentação local fora do tracing. Use `npm audit` e `npm audit --omit=dev`. Resultados e limites atuais estão em `VALIDATION-PHASE5.md`; o relatório da portabilidade anterior permanece em `VALIDATION-PHASE7.md`. Navegador é responsabilidade da Lupa pelo portal Maestri; não usar agent-browser.
+
+## Google Calendar — Fase 9
+
+Permite conectar múltiplas contas do Google (trabalho, pessoal, estudos) em modo **estritamente somente leitura**, agregando os compromissos de hoje na tela `/calendario` em ordem cronológica com a rotina diária.
+
+### 1. Configurar credenciais no Google Cloud Console
+
+1. Acesse o [Google Cloud Console](https://console.cloud.google.com/) e crie ou selecione um projeto.
+2. Em **APIs e Serviços > Biblioteca**, pesquise por **Google Calendar API** e clique em **Ativar**.
+3. Em **Tela de permissão OAuth**, selecione o tipo de usuário (Externo ou Interno) e configure o nome da aplicação. Em **Escopos**, adicione:
+   - `openid`
+   - `email`
+   - `https://www.googleapis.com/auth/calendar.readonly`
+4. Em **Credenciais > Criar credenciais > ID do cliente OAuth**:
+   - Tipo de aplicativo: **Aplicativo da Web**.
+   - Nome: `Rotina Pet Calendar`.
+   - **URIs de redirecionamento autorizados**:
+     - Local: `http://localhost:3000/api/calendar/callback` e `http://127.0.0.1:3000/api/calendar/callback`
+     - Produção: `https://<seu-dominio>/api/calendar/callback`
+5. Guarde o **ID do cliente** (`GOOGLE_CLIENT_ID`) e o **Segredo do cliente** (`GOOGLE_CLIENT_SECRET`).
+
+### 2. Gerar a chave de criptografia de tokens (AES-256-GCM)
+
+Os `refresh_token` do Google são armazenados criptografados com AES-256-GCM (versão `v1:iv:tag:cipher`) no banco de dados. Gere uma chave aleatória de 32 bytes em Base64:
+
+```powershell
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+```
+
+Configure o resultado na variável de ambiente `CALENDAR_TOKEN_KEY`.
+
+### 3. Variáveis de Ambiente
+
+No seu `.env` ou nas configurações da plataforma de hospedagem:
+
+```env
+GOOGLE_CLIENT_ID="seu-client-id.apps.googleusercontent.com"
+GOOGLE_CLIENT_SECRET="seu-client-secret"
+CALENDAR_TOKEN_KEY="chave-base64-de-32-bytes"
+APP_URL="http://localhost:3000" # Opcional; se omitido, infere da requisição ou de VERCEL_PROJECT_PRODUCTION_URL
+```
+
+Se as variáveis não estiverem configuradas, o recurso de calendário permanece desativado com mensagem explicativa amigável, sem derrubar a aplicação.
+
+### 4. Segurança do Fluxo
+
+- **Somente leitura:** Nenhum evento é criado, editado ou excluído no Google Agenda.
+- **PKCE + State:** Protegido contra CSRF e interceptação de código OAuth via `code_challenge` S256 e state guardado em cookie `httpOnly`, `sameSite=lax` e `secure`.
+- **Criptografia em repouso:** Refresh tokens nunca são salvos em texto claro.
+- **Tokens efêmeros:** Access tokens são mantidos apenas em memória temporária para consulta e descartados; nunca são gravados no banco.
+- **Isolamento multi-usuário:** Toda consulta e exclusão filtra estritamente pelo `user_id` autenticado na sessão do servidor.
+- **Resiliência:** A expiração (`invalid_grant`) de uma conta Google não interrompe o carregamento das outras contas conectadas.
+
