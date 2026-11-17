@@ -19,6 +19,7 @@ import {
   weekdaySP,
   weekdaysMask,
   activityScheduledOn,
+  precomputeScheduledDays,
   validActivitySchedule,
 } from "./rules";
 
@@ -334,10 +335,7 @@ async function recordActivity(
           ),
         );
       const schedules = await userSchedules(tx, userId);
-      const scheduled = (date: string) =>
-        schedules.some((schedule) =>
-          activityScheduledOn(schedule, schedule.routineWeekdays, date),
-        );
+      const scheduled = precomputeScheduledDays(schedules);
       const bonus =
         status === "completed"
           ? Math.min(
@@ -499,6 +497,13 @@ export async function dashboard(
     )
     .map((row) => row.activity);
   const done = activeActivities.filter((row) => completed.has(row.id)).length;
+  const scheduled = precomputeScheduledDays(
+    activityRows.map(({ activity, routineWeekdays }) => ({
+      weekdays: activity.weekdays,
+      onceDate: activity.onceDate,
+      routineWeekdays,
+    })),
+  );
   return {
     routines: routineRows
       .filter(
@@ -526,10 +531,7 @@ export async function dashboard(
     streak: currentStreak(
       completedDays.map((row) => row.day),
       dayKey(now),
-      (date) =>
-        activityRows.some((row) =>
-          activityScheduledOn(row.activity, row.routineWeekdays, date),
-        ),
+      scheduled,
     ),
     history: history.map((row) => ({
       ...row.event,

@@ -122,6 +122,24 @@ export function activityScheduledOn(
   return ((schedule.weekdays ?? routineWeekdays) & (1 << weekday)) !== 0;
 }
 
+/** Compila uma vez a união da agenda: consulta O(1) por dia, sem revisitar atividades. */
+export function precomputeScheduledDays(
+  schedules: readonly (ActivitySchedule & { routineWeekdays: number })[],
+): (day: string) => boolean {
+  let weekdays = 0;
+  const onceDates = new Set<string>();
+  for (const schedule of schedules) {
+    if (schedule.onceDate !== null) onceDates.add(schedule.onceDate);
+    else weekdays |= schedule.weekdays ?? schedule.routineWeekdays;
+  }
+  return (day) => {
+    if (onceDates.has(day)) return true;
+    if (weekdays === 0) return false;
+    const weekday = new Date(`${day}T12:00:00Z`).getUTCDay();
+    return (weekdays & (1 << weekday)) !== 0;
+  };
+}
+
 export function scheduleSummary(
   schedule: ActivitySchedule,
   routineWeekdays: number,
