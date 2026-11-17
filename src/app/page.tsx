@@ -1,7 +1,17 @@
 import { getDatabase } from "../db/client";
 import { dashboard } from "../lib/store";
-import { POINTS_PER_ACTIVITY, TIME_ZONE } from "../lib/rules";
-import { createActivity, createRoutine, finishActivity } from "./actions";
+import {
+  MAX_STREAK_BONUS,
+  POINTS_PER_ACTIVITY,
+  SKIP_PENALTY,
+  TIME_ZONE,
+} from "../lib/rules";
+import {
+  createActivity,
+  createRoutine,
+  finishActivity,
+  passActivity,
+} from "./actions";
 import { Submit } from "./submit";
 import { Pet } from "./pet";
 import Link from "next/link";
@@ -60,7 +70,7 @@ export default async function Home({
           </div>
           <div className="score">
             <strong>{data.points.toLocaleString("pt-BR")}</strong>
-            <span>pontos conquistados</span>
+            <span>saldo de pontos</span>
           </div>
         </div>
         {query.error && (
@@ -125,7 +135,13 @@ export default async function Home({
                   {routine.activities.map((activity) => (
                     <li
                       key={activity.id}
-                      className={activity.done ? "done" : ""}
+                      className={
+                        activity.done
+                          ? "done"
+                          : activity.skipped
+                            ? "skipped"
+                            : ""
+                      }
                     >
                       <div>
                         <span className="activity-name">{activity.name}</span>
@@ -138,20 +154,38 @@ export default async function Home({
                           </time>
                         )}
                         <span className="activity-points">
-                          {activity.done
-                            ? `${POINTS_PER_ACTIVITY} pontos ganhos hoje`
-                            : `+${POINTS_PER_ACTIVITY} pontos`}
+                          {activity.skipped
+                            ? `-${SKIP_PENALTY} pontos · pulada hoje`
+                            : activity.done
+                              ? `+${POINTS_PER_ACTIVITY} pontos${activity.bonus ? ` · +${activity.bonus} bônus` : ""}`
+                              : `+${POINTS_PER_ACTIVITY} pontos`}
                         </span>
                       </div>
-                      <form action={finishActivity}>
+                      <form
+                        action={finishActivity}
+                        className="activity-actions"
+                        aria-label={`Concluir ou pular ${activity.name}`}
+                      >
                         <input
                           type="hidden"
                           name="activityId"
                           value={activity.id}
                         />
-                        <Submit disabled={activity.done}>
-                          {activity.done ? "Concluída" : "Concluir"}
+                        <Submit disabled={activity.done || activity.skipped}>
+                          {activity.done
+                            ? "Concluída"
+                            : activity.skipped
+                              ? "Pulada"
+                              : "Concluir"}
                         </Submit>
+                        {!activity.done && !activity.skipped && (
+                          <Submit
+                            formAction={passActivity}
+                            className="skip-activity"
+                          >
+                            Pular (-{SKIP_PENALTY})
+                          </Submit>
+                        )}
                       </form>
                     </li>
                   ))}
@@ -219,6 +253,21 @@ export default async function Home({
                 você.
               </small>
             </section>
+            <section className="streak" aria-labelledby="streak-title">
+              <h2 id="streak-title">Sequência atual</h2>
+              <strong>
+                {data.streak} {data.streak === 1 ? "dia" : "dias"}
+              </strong>
+              <p>
+                Conclua ao menos uma atividade por dia. Cada conclusão rende +
+                {POINTS_PER_ACTIVITY} pontos e até +{MAX_STREAK_BONUS} de bônus
+                por sequência.
+              </p>
+              <p>
+                Pular desconta até {SKIP_PENALTY} pontos. O saldo nunca fica
+                negativo; pular não conta como conclusão.
+              </p>
+            </section>
             <p className="gentle">
               Constância vale mais que perfeição.
               <br />
@@ -226,6 +275,46 @@ export default async function Home({
             </p>
           </aside>
         </div>
+        <section className="points-history" aria-labelledby="history-title">
+          <h2 id="history-title">Histórico de pontos</h2>
+          <p className="hint">
+            Últimos 30 registros, do mais recente ao mais antigo. O desconto de
+            -{SKIP_PENALTY} é limitado ao saldo disponível, sem gerar dívida.
+          </p>
+          {data.history.length === 0 ? (
+            <p className="hint">
+              Suas conclusões e atividades puladas aparecerão aqui.
+            </p>
+          ) : (
+            <ol>
+              {data.history.map((event) => (
+                <li key={event.id}>
+                  <div>
+                    <time dateTime={event.day}>
+                      {event.day.split("-").reverse().join("/")}
+                    </time>
+                    <strong>{event.activityName}</strong>
+                    <span>
+                      {event.status === "completed" ? "Concluída" : "Pulada"}
+                    </span>
+                  </div>
+                  <div className="point-change">
+                    <span>
+                      {event.points >= 0 ? "+" : ""}
+                      {event.points} pontos
+                    </span>
+                    {event.bonus > 0 && (
+                      <span>+{event.bonus} bônus de sequência</span>
+                    )}
+                    <small>
+                      Saldo: {event.balanceAfter.toLocaleString("pt-BR")}
+                    </small>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          )}
+        </section>
       </main>
       <footer>
         Rotina Pet <span>Um passo de cada vez.</span>

@@ -34,8 +34,16 @@ export const completions = sqliteTable(
       .references(() => activities.id),
     day: text("day").notNull(),
     points: integer("points").notNull().default(10),
+    // Uma linha resolve o dia: concluir ou pular compartilham o mesmo índice único.
+    status: text("status", { enum: ["completed", "skipped"] })
+      .notNull()
+      .default("completed"),
+    bonus: integer("bonus").notNull().default(0),
+    eventOrder: integer("event_order").notNull().default(0),
+    balanceAfter: integer("balance_after").notNull().default(0),
   },
   (table) => [
     uniqueIndex("completion_activity_day").on(table.activityId, table.day),
+    uniqueIndex("completion_event_order").on(table.eventOrder),
   ],
 );

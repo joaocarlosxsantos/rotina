@@ -59,7 +59,7 @@ test("rotina persiste, pontua uma vez por dia e renova atividades sem perder pon
     assert.equal(next.points, 10);
     assert.equal(next.mood, "triste");
     await completeActivity(connection.db, activity.id, tomorrow);
-    assert.equal((await dashboard(connection.db, tomorrow)).points, 20);
+    assert.equal((await dashboard(connection.db, tomorrow)).points, 21);
     await assert.rejects(
       () => addActivity(connection.db, "invalid", "Teste"),
       InputError,

@@ -260,6 +260,12 @@ SVG original com grade (16 × 16), células retangulares e `crispEdges`, exibido
 
 Barra nativa `progress`, altura (8px), trilha suave e preenchimento verde. Porcentagem e contagem são exibidas em texto, com explicação da virada do dia em São Paulo. Não há movimento ou recompensa animada.
 
+### Skip, streak and points history
+
+Concluir e “Pular (-5)” ficam no mesmo formulário da atividade, com ações distintas no servidor. Durante submissão, ambos ficam desabilitados; a ação Pular usa o tratamento terracota já adotado em arquivamento. Atividades puladas exibem “Pulada”, penalidade escrita e estado bloqueado para o dia. Em telas estreitas, as ações empilham para manter alvos legíveis.
+
+A sequência atual é uma seção textual junto ao progresso diário, com número de dias e explicação do bônus e do saldo mínimo. O histórico ocupa a largura do conteúdo, em lista com divisórias: data civil de São Paulo, nome, conclusão/pulo, pontos base, bônus e saldo após o evento. As últimas 30 linhas são ordenadas da mais recente à mais antiga; textos e números comunicam os estados sem depender da cor. A revisão de navegador da Fase 3 pertence à Lupa pelo portal Maestri.
+
 ### Notices and empty state
 
 Sucesso usa superfície suave e `role="status"`; erro usa tons próprios e `role="alert"`. O estado vazio permanece sobre o papel e orienta a criar uma rotina. As mensagens usam texto e semântica além de cor.

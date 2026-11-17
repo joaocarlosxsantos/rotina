@@ -1,4 +1,6 @@
 export const POINTS_PER_ACTIVITY = 10;
+export const SKIP_PENALTY = 5;
+export const MAX_STREAK_BONUS = 5;
 export const TIME_ZONE = "America/Sao_Paulo";
 export const WEEKDAYS = [
   "Dom",
@@ -62,6 +64,32 @@ export function completionMessage(completed: boolean): string {
   return completed
     ? "Conclusão registrada. Cada atividade vale pontos uma vez por dia."
     : "Já concluída hoje";
+}
+
+export function skipMessage(skipped: boolean): string {
+  return skipped
+    ? `Atividade pulada. Desconto de até ${SKIP_PENALTY} pontos aplicado, respeitando o saldo mínimo de zero.`
+    : "Já pulada hoje";
+}
+
+export function previousDay(day: string): string {
+  const date = new Date(`${day}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() - 1);
+  return date.toISOString().slice(0, 10);
+}
+
+export function currentStreak(
+  completedDays: readonly string[],
+  today: string,
+): number {
+  const days = new Set(completedDays);
+  let cursor = days.has(today) ? today : previousDay(today);
+  let count = 0;
+  while (days.has(cursor)) {
+    count += 1;
+    cursor = previousDay(cursor);
+  }
+  return count;
 }
 
 export function validName(value: unknown): string {

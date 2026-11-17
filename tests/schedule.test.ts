@@ -176,7 +176,7 @@ test("virada 02:59Z/03:00Z em completeActivity troca o dia elegível e o dia gra
       rows.find((row) => row.activityId === sundayActivity.id)?.day,
       "2026-11-22",
     );
-    assert.equal((await dashboard(db, before)).points, 20);
+    assert.equal((await dashboard(db, before)).points, 21);
     assert.equal((await dashboard(db, after)).total, 1);
     assert.equal((await dashboard(db, after)).done, 1);
   });

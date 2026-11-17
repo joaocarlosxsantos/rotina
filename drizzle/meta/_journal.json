@@ -15,6 +15,13 @@
       "when": 1794919275589,
       "tag": "0001_sudden_trauma",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1794921640125,
+      "tag": "0002_mushy_nocturne",
+      "breakpoints": true
     }
   ]
 }

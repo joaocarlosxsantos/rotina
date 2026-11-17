@@ -7,12 +7,13 @@ import {
   addActivity,
   addRoutine,
   completeActivity,
+  skipActivity,
   updateRoutine,
   updateActivity,
   archiveRoutine,
   archiveActivity,
 } from "../lib/store";
-import { completionMessage, InputError } from "../lib/rules";
+import { completionMessage, InputError, skipMessage } from "../lib/rules";
 
 async function mutate<T>(
   work: () => Promise<T>,
@@ -110,5 +111,12 @@ export async function finishActivity(form: FormData) {
   await mutate(
     () => completeActivity(getDatabase(), form.get("activityId")),
     completionMessage,
+  );
+}
+
+export async function passActivity(form: FormData) {
+  await mutate(
+    () => skipActivity(getDatabase(), form.get("activityId")),
+    skipMessage,
   );
 }

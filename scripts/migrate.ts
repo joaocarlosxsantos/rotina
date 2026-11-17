@@ -1,5 +1,6 @@
 import { mkdir } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
+import { randomUUID } from "node:crypto";
 import { migrate } from "drizzle-orm/libsql/migrator";
 import { createDatabase, localDatabaseUrl } from "../src/db/client";
 
@@ -17,6 +18,14 @@ async function main() {
   await mkdir(dirname(resolve(url.slice("file:".length))), { recursive: true });
   const { client, db } = createDatabase(url);
   try {
+    // Snapshot consistente, inclusive com WAL; falha no backup impede a migration.
+    const databasePath = resolve(url.slice("file:".length));
+    const backupPath = join(
+      dirname(databasePath),
+      `${basename(databasePath)}.backup-${Date.now()}-${randomUUID().slice(0, 8)}.db`,
+    );
+    await client.execute({ sql: "VACUUM INTO ?", args: [backupPath] });
+    console.log("Backup SQLite local criado antes da migration.");
     await migrate(db, { migrationsFolder: "./drizzle" });
     console.log("Migrations aplicadas somente ao SQLite local.");
   } finally {
