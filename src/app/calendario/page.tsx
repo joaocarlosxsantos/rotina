@@ -7,6 +7,7 @@ import {
   getTodayBoundsSP,
   isValidCalendarHtmlLink,
   MAX_FEED_EVENTS_TOTAL,
+  sanitizeCalendarColor,
 } from "../../lib/calendar/store";
 import { TIME_ZONE } from "../../lib/rules";
 import { Header } from "../header";
@@ -273,10 +274,14 @@ export default async function CalendarPage({
                                       className="event-calendar-badge"
                                       title={`Calendário: ${event.calendarName}`}
                                     >
-                                      {event.calendarColor && (
+                                      {sanitizeCalendarColor(event.calendarColor) && (
                                         <span
                                           className="event-color-dot"
-                                          style={{ backgroundColor: event.calendarColor }}
+                                          style={{
+                                            backgroundColor: sanitizeCalendarColor(
+                                              event.calendarColor,
+                                            ),
+                                          }}
                                           aria-hidden="true"
                                         />
                                       )}

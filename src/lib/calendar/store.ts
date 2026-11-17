@@ -143,6 +143,18 @@ export function isValidCalendarHtmlLink(link?: string): boolean {
   return link.startsWith("https://www.google.com/") || link.startsWith("https://calendar.google.com/");
 }
 
+const HEX_COLOR_REGEX = /^#[0-9a-f]{6}$/i;
+
+/**
+ * Valida e sanitiza cores hexadecimais de calendário (ex.: #039be5).
+ * Descarta valores inválidos ou maliciosos (ex.: 'red;background:url(x)').
+ */
+export function sanitizeCalendarColor(color?: string): string | undefined {
+  if (!color || typeof color !== "string") return undefined;
+  const trimmed = color.trim();
+  return HEX_COLOR_REGEX.test(trimmed) ? trimmed.toLowerCase() : undefined;
+}
+
 export async function listCalendarAccounts(
   db: Database,
   user: CurrentUser,
@@ -545,7 +557,9 @@ export async function getCalendarFeed(
           });
 
           if (!calListRes.ok) {
-            isPartial = true;
+            if (calListRes.status === 429 || calListRes.status >= 500) {
+              isPartial = true;
+            }
             // M3: NUNCA loga nomes nem resumos
             console.error(`Falha ao listar calendários: status=${calListRes.status}`);
             break;
@@ -580,7 +594,7 @@ export async function getCalendarFeed(
             rawCalendars.push({
               id: cal.id,
               name,
-              color: cal.backgroundColor,
+              color: sanitizeCalendarColor(cal.backgroundColor),
               isSpecial,
               primary: cal.primary,
             });
@@ -658,7 +672,9 @@ export async function getCalendarFeed(
             });
 
             if (!res.ok) {
-              isPartial = true;
+              if (res.status === 429 || res.status >= 500) {
+                isPartial = true;
+              }
               // M3: NUNCA loga nome de calendário nem evento; loga só status e hash curto
               const calHash = createHash("sha256").update(cal.id).digest("hex").slice(0, 8);
               console.error(`Falha ao buscar eventos: status=${res.status} cal_hash=${calHash}`);
@@ -751,7 +767,7 @@ export async function getCalendarFeed(
                         calendarId: cal.id,
                         calendarName: cal.name,
                         calendarNames: [cal.name],
-                        calendarColor: cal.color,
+                        calendarColor: sanitizeCalendarColor(cal.color),
                         isSpecialCalendar: cal.isSpecial,
                         startDateSP: dayKey,
                         isMultiDay,
