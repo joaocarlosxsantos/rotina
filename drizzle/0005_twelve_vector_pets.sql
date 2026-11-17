@@ -1,2 +1,2 @@
-ALTER TABLE "user_settings" DROP CONSTRAINT "user_settings_pet_kind_valid";--> statement-breakpoint
+ALTER TABLE "user_settings" DROP CONSTRAINT IF EXISTS "user_settings_pet_kind_valid";--> statement-breakpoint
 ALTER TABLE "user_settings" ADD CONSTRAINT "user_settings_pet_kind_valid" CHECK ("user_settings"."pet_kind" in ('original', 'gato', 'cachorro', 'coelho', 'dragao', 'planta', 'hamster', 'raposa', 'panda', 'pinguim', 'pintinho', 'coruja'));

@@ -235,6 +235,7 @@ test("transação de lançamento desfaz alterações e libera lock após erro", 
 });
 
 test("CLI aplica migration em PGlite local e repete sem mudar o journal", async () => {
+  const journal = JSON.parse(await readFile("drizzle/meta/_journal.json", "utf8"));
   await mkdir(join(process.cwd(), "data"), { recursive: true });
   const folder = await mkdtemp(join(process.cwd(), "data", "pg-cli-test-"));
   try {
@@ -265,7 +266,7 @@ test("CLI aplica migration em PGlite local e repete sem mudar o journal", async 
       const result = await connection.db.execute<{ count: number }>(
         sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
       );
-      assert.equal(result.rows[0].count, 6);
+      assert.equal(result.rows[0].count, journal.entries.length);
     } finally {
       await connection.close();
     }
