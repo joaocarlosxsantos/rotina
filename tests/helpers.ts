@@ -17,3 +17,5 @@ export async function withDatabase(work: (db: Database) => Promise<void>) {
 after(async () => {
   if (shared) await shared.close();
 });
+
+export const TEST_USER = { id: "00000000-0000-4000-8000-000000000001", email: "fixture@example.test", name: "Pessoa de teste" };

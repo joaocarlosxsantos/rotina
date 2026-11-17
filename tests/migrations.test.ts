@@ -1,3 +1,4 @@
+import { TEST_USER } from "./helpers";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
@@ -21,7 +22,8 @@ import {
   completeActivity,
   dashboard,
 } from "../src/lib/store";
-import { completions } from "../src/db/schema";
+import { completions, routines, activities } from "../src/db/schema";
+import { catalog } from "../src/lib/store";
 import { withDatabase } from "./helpers";
 
 test("há uma migration inicial Postgres e ela é idempotente sem alterar dados", async () => {
@@ -29,20 +31,20 @@ test("há uma migration inicial Postgres e ela é idempotente sem alterar dados"
     await readFile("drizzle/meta/_journal.json", "utf8"),
   );
   assert.equal(journal.dialect, "postgresql");
-  assert.equal(journal.entries.length, 1);
+  assert.equal(journal.entries.length, 2);
   const connection = await createDatabase();
   try {
     await migrateDatabase(connection);
-    const routine = await addRoutine(connection.db, "Preservada");
-    const activity = await addActivity(connection.db, routine.id, "Preservada");
+    const routine = await addRoutine(connection.db, TEST_USER, "Preservada");
+    const activity = await addActivity(connection.db, TEST_USER, routine.id, "Preservada");
     await completeActivity(
-      connection.db,
+      connection.db, TEST_USER,
       activity.id,
       new Date("2026-11-17T14:00:00Z"),
     );
     await migrateDatabase(connection);
     const state = await dashboard(
-      connection.db,
+      connection.db, TEST_USER,
       new Date("2026-11-17T14:00:00Z"),
     );
     assert.equal(state.points, 10);
@@ -50,9 +52,39 @@ test("há uma migration inicial Postgres e ela é idempotente sem alterar dados"
     const rows = await connection.db.execute<{ count: number }>(
       sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
     );
-    assert.equal(rows.rows[0].count, 1);
+    assert.equal(rows.rows[0].count, 2);
   } finally {
     await connection.close();
+  }
+});
+
+test("migration de isolamento preserva dados antigos como órfãos inacessíveis", async () => {
+  const folder = await mkdtemp(join(tmpdir(), "pg-legacy-isolation-"));
+  const connection = await createDatabase();
+  try {
+    const journal = JSON.parse(await readFile("drizzle/meta/_journal.json", "utf8"));
+    const initial = journal.entries[0];
+    await mkdir(join(folder, "meta"));
+    await writeFile(join(folder, "meta", "_journal.json"), JSON.stringify({ ...journal, entries: [initial] }));
+    await copyFile(`drizzle/${initial.tag}.sql`, join(folder, `${initial.tag}.sql`));
+    await migrateDatabase(connection, folder);
+    const r = randomUUID(), a = randomUUID(), c = randomUUID();
+    await connection.db.execute(sql`insert into routines(id,name) values(${r}::uuid, 'Antiga')`);
+    await connection.db.execute(sql`insert into activities(id,routine_id,name) values(${a}::uuid, ${r}::uuid, 'Antiga')`);
+    await connection.db.execute(sql`insert into completions(id,activity_id,day,points,status,bonus,event_order,balance_after) values(${c}::uuid, ${a}::uuid, '2026-11-17', 10, 'completed', 0, 1, 10)`);
+    await migrateDatabase(connection);
+    assert.equal((await connection.db.select().from(routines))[0].userId, null);
+    assert.equal((await connection.db.select().from(activities))[0].userId, null);
+    const saved = (await connection.db.select().from(completions))[0];
+    assert.equal(saved.userId, null); assert.equal(saved.balanceAfter, 10); assert.equal(saved.id, c);
+    assert.deepEqual(await catalog(connection.db, TEST_USER), []);
+    const state = await dashboard(connection.db, TEST_USER, new Date("2026-11-17T14:00:00Z"));
+    assert.equal(state.points, 0); assert.deepEqual(state.history, []);
+    await assert.rejects(() => addActivity(connection.db, TEST_USER, r, "Não assumir"));
+    await assert.rejects(() => completeActivity(connection.db, TEST_USER, a));
+  } finally {
+    await connection.close();
+    await rm(folder, { recursive: true, force: true });
   }
 });
 
@@ -67,21 +99,22 @@ test("falha em migration Postgres reverte DDL e não avança o journal", async (
     const original = journal.entries[0];
     const broken = {
       ...original,
-      idx: 1,
-      when: original.when + 1,
-      tag: "0001_broken",
+      idx: 2,
+      when: journal.entries[1].when + 1,
+      tag: "0002_broken",
     };
     await mkdir(join(folder, "meta"));
     await writeFile(
       join(folder, "meta", "_journal.json"),
-      JSON.stringify({ ...journal, entries: [original, broken] }),
+      JSON.stringify({ ...journal, entries: [...journal.entries, broken] }),
     );
     await copyFile(
       `drizzle/${original.tag}.sql`,
       join(folder, `${original.tag}.sql`),
     );
+    await copyFile(`drizzle/${journal.entries[1].tag}.sql`, join(folder, `${journal.entries[1].tag}.sql`));
     await writeFile(
-      join(folder, "0001_broken.sql"),
+      join(folder, "0002_broken.sql"),
       "create table rollback_probe(id integer);--> statement-breakpoint\ninsert into table_that_does_not_exist values(1);",
     );
     await assert.rejects(() => migrateDatabase(connection, folder));
@@ -92,7 +125,7 @@ test("falha em migration Postgres reverte DDL e não avança o journal", async (
     const journalRows = await connection.db.execute<{ count: number }>(
       sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
     );
-    assert.equal(journalRows.rows[0].count, 1);
+    assert.equal(journalRows.rows[0].count, 2);
   } finally {
     await connection.close();
     await rm(folder, { recursive: true, force: true });
@@ -101,11 +134,12 @@ test("falha em migration Postgres reverte DDL e não avança o journal", async (
 
 test("Postgres garante índice único atividade/dia, ordem, piso, bônus e referência", async () => {
   await withDatabase(async (db) => {
-    const routine = await addRoutine(db, "Integridade");
-    const activity = await addActivity(db, routine.id, "Integridade");
-    await completeActivity(db, activity.id, new Date("2026-11-17T14:00:00Z"));
+    const routine = await addRoutine(db, TEST_USER, "Integridade");
+    const activity = await addActivity(db, TEST_USER, routine.id, "Integridade");
+    await completeActivity(db, TEST_USER, activity.id, new Date("2026-11-17T14:00:00Z"));
     const base = {
       id: randomUUID(),
+      userId: TEST_USER.id,
       activityId: activity.id,
       day: "2026-11-17",
       points: -5,
@@ -148,18 +182,18 @@ test("transação de lançamento desfaz alterações e libera lock após erro", 
         throw new Error("rollback intencional");
       }),
     );
-    const routine = await addRoutine(db, "Continua funcionando");
+    const routine = await addRoutine(db, TEST_USER, "Continua funcionando");
     const activity = await addActivity(
-      db,
+      db, TEST_USER,
       routine.id,
       "Concluir após rollback",
     );
     assert.equal(
-      await completeActivity(db, activity.id, new Date("2026-11-17T14:00:00Z")),
+      await completeActivity(db, TEST_USER, activity.id, new Date("2026-11-17T14:00:00Z")),
       true,
     );
     assert.equal(
-      (await dashboard(db, new Date("2026-11-17T14:00:00Z"))).routines.length,
+      (await dashboard(db, TEST_USER, new Date("2026-11-17T14:00:00Z"))).routines.length,
       1,
     );
   });
@@ -196,7 +230,7 @@ test("CLI aplica migration em PGlite local e repete sem mudar o journal", async 
       const result = await connection.db.execute<{ count: number }>(
         sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
       );
-      assert.equal(result.rows[0].count, 1);
+      assert.equal(result.rows[0].count, 2);
     } finally {
       await connection.close();
     }

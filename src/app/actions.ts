@@ -1,5 +1,6 @@
 "use server";
 
+import { requireCurrentUser } from "../auth/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getDatabase } from "../db/client";
@@ -44,18 +45,20 @@ function destination(form: FormData) {
 }
 
 export async function createRoutine(form: FormData) {
+  const user = await requireCurrentUser();
   await mutate(
     async () =>
-      addRoutine(await getDatabase(), form.get("name"), form.getAll("days")),
+      addRoutine(await getDatabase(), user, form.get("name"), form.getAll("days")),
     "Rotina criada. Agora adicione suas atividades.",
     destination(form),
   );
 }
 export async function createActivity(form: FormData) {
+  const user = await requireCurrentUser();
   await mutate(
     async () =>
       addActivity(
-        await getDatabase(),
+        await getDatabase(), user,
         form.get("routineId"),
         form.get("name"),
         form.get("time"),
@@ -66,10 +69,11 @@ export async function createActivity(form: FormData) {
 }
 
 export async function editRoutine(form: FormData) {
+  const user = await requireCurrentUser();
   await mutate(
     async () =>
       updateRoutine(
-        await getDatabase(),
+        await getDatabase(), user,
         form.get("routineId"),
         form.get("name"),
         form.getAll("days"),
@@ -80,10 +84,11 @@ export async function editRoutine(form: FormData) {
 }
 
 export async function editActivity(form: FormData) {
+  const user = await requireCurrentUser();
   await mutate(
     async () =>
       updateActivity(
-        await getDatabase(),
+        await getDatabase(), user,
         form.get("activityId"),
         form.get("name"),
         form.get("time"),
@@ -94,30 +99,34 @@ export async function editActivity(form: FormData) {
 }
 
 export async function hideRoutine(form: FormData) {
+  const user = await requireCurrentUser();
   await mutate(
-    async () => archiveRoutine(await getDatabase(), form.get("routineId")),
+    async () => archiveRoutine(await getDatabase(), user, form.get("routineId")),
     "Rotina arquivada. Histórico e pontos preservados.",
     destination(form),
   );
 }
 
 export async function hideActivity(form: FormData) {
+  const user = await requireCurrentUser();
   await mutate(
-    async () => archiveActivity(await getDatabase(), form.get("activityId")),
+    async () => archiveActivity(await getDatabase(), user, form.get("activityId")),
     "Atividade arquivada. Histórico e pontos preservados.",
     destination(form),
   );
 }
 export async function finishActivity(form: FormData) {
+  const user = await requireCurrentUser();
   await mutate(
-    async () => completeActivity(await getDatabase(), form.get("activityId")),
+    async () => completeActivity(await getDatabase(), user, form.get("activityId")),
     completionMessage,
   );
 }
 
 export async function passActivity(form: FormData) {
+  const user = await requireCurrentUser();
   await mutate(
-    async () => skipActivity(await getDatabase(), form.get("activityId")),
+    async () => skipActivity(await getDatabase(), user, form.get("activityId")),
     skipMessage,
   );
 }

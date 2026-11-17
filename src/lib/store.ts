@@ -1,3 +1,4 @@
+import { authenticatedId, type CurrentUser } from "../auth/contracts";
 import { randomUUID } from "node:crypto";
 import { and, asc, desc, eq, isNull, lte, sql } from "drizzle-orm";
 import type { Database } from "../db/client";
@@ -18,13 +19,21 @@ import {
   weekdaysMask,
 } from "./rules";
 
+export function userLedgerLock(user: CurrentUser) {
+  const userId = authenticatedId(user);
+  return sql`select pg_advisory_xact_lock(hashtextextended(${userId}, 724681))`;
+}
+
 export async function addRoutine(
   db: Database,
+  user: CurrentUser,
   name: unknown,
   days: unknown = ALL_WEEKDAYS,
 ) {
+  const userId = authenticatedId(user);
   const row = {
     id: randomUUID(),
+    userId,
     name: validName(name),
     weekdays: weekdaysMask(days),
     archivedAt: null,
@@ -36,41 +45,47 @@ export async function addRoutine(
 
 export async function updateRoutine(
   db: Database,
+  user: CurrentUser,
   routineId: unknown,
   name: unknown,
   days: unknown,
 ) {
+  const userId = authenticatedId(user);
   const id = validId(routineId);
   const values = { name: validName(name), weekdays: weekdaysMask(days) };
   const rows = await db
     .update(routines)
     .set(values)
-    .where(and(eq(routines.id, id), isNull(routines.archivedAt)))
+    .where(and(eq(routines.id, id), eq(routines.userId, userId), isNull(routines.archivedAt)))
     .returning();
   if (!rows.length)
     throw new InputError("Rotina ativa não encontrada. Atualize a página.");
   return rows[0];
 }
 
-export async function archiveRoutine(db: Database, routineId: unknown) {
+export async function archiveRoutine(db: Database,
+  user: CurrentUser, routineId: unknown) {
+  const userId = authenticatedId(user);
   const id = validId(routineId);
   const rows = await db
     .update(routines)
     .set({ archivedAt: new Date() })
-    .where(and(eq(routines.id, id), isNull(routines.archivedAt)))
+    .where(and(eq(routines.id, id), eq(routines.userId, userId), isNull(routines.archivedAt)))
     .returning();
   if (!rows.length)
     throw new InputError("Rotina ativa não encontrada. Atualize a página.");
 }
 
-const activeParent = sql`exists (select 1 from ${routines} where ${routines.id} = ${activities.routineId} and ${routines.archivedAt} is null for share)`;
+const activeParent = (userId: string) => sql`exists (select 1 from ${routines} where ${routines.id} = ${activities.routineId} and ${routines.userId} = ${userId} and ${routines.archivedAt} is null for share)`;
 
 export async function addActivity(
   db: Database,
+  user: CurrentUser,
   routineId: unknown,
   name: unknown,
   time: unknown = null,
 ) {
+  const userId = authenticatedId(user);
   const id = validId(routineId);
   const activityName = validName(name);
   const scheduledTime = validTime(time);
@@ -81,6 +96,7 @@ export async function addActivity(
       db
         .select({
           id: sql<string>`${randomUUID()}::uuid`.as("id"),
+          userId: sql<string>`${userId}::text`.as("user_id"),
           routineId: routines.id,
           name: sql<string>`${activityName}`.as("name"),
           scheduledTime: sql<string | null>`${scheduledTime}::text`.as(
@@ -90,7 +106,7 @@ export async function addActivity(
           createdAt: sql<Date>`now()`.as("created_at"),
         })
         .from(routines)
-        .where(and(eq(routines.id, id), isNull(routines.archivedAt)))
+        .where(and(eq(routines.id, id), eq(routines.userId, userId), isNull(routines.archivedAt)))
         .for("share", { of: routines }),
     )
     .returning();
@@ -101,17 +117,19 @@ export async function addActivity(
 
 export async function updateActivity(
   db: Database,
+  user: CurrentUser,
   activityId: unknown,
   name: unknown,
   time: unknown,
 ) {
+  const userId = authenticatedId(user);
   const id = validId(activityId);
   const values = { name: validName(name), scheduledTime: validTime(time) };
   const rows = await db
     .update(activities)
     .set(values)
     .where(
-      and(eq(activities.id, id), isNull(activities.archivedAt), activeParent),
+      and(eq(activities.id, id), eq(activities.userId, userId), isNull(activities.archivedAt), activeParent(userId)),
     )
     .returning();
   if (!rows.length)
@@ -119,13 +137,15 @@ export async function updateActivity(
   return rows[0];
 }
 
-export async function archiveActivity(db: Database, activityId: unknown) {
+export async function archiveActivity(db: Database,
+  user: CurrentUser, activityId: unknown) {
+  const userId = authenticatedId(user);
   const id = validId(activityId);
   const rows = await db
     .update(activities)
     .set({ archivedAt: new Date() })
     .where(
-      and(eq(activities.id, id), isNull(activities.archivedAt), activeParent),
+      and(eq(activities.id, id), eq(activities.userId, userId), isNull(activities.archivedAt), activeParent(userId)),
     )
     .returning();
   if (!rows.length)
@@ -134,33 +154,39 @@ export async function archiveActivity(db: Database, activityId: unknown) {
 
 export async function completeActivity(
   db: Database,
+  user: CurrentUser,
   activityId: unknown,
   now = new Date(),
 ) {
-  return recordActivity(db, activityId, "completed", now);
+  authenticatedId(user);
+  return recordActivity(db, user, activityId, "completed", now);
 }
 
 export async function skipActivity(
   db: Database,
+  user: CurrentUser,
   activityId: unknown,
   now = new Date(),
 ) {
-  return recordActivity(db, activityId, "skipped", now);
+  authenticatedId(user);
+  return recordActivity(db, user, activityId, "skipped", now);
 }
 
 async function recordActivity(
   db: Database,
+  user: CurrentUser,
   activityId: unknown,
   status: "completed" | "skipped",
   now: Date,
 ) {
+  const userId = authenticatedId(user);
   const id = validId(activityId);
   const day = dayKey(now);
   const dayBit = 1 << weekdaySP(now);
   return db.transaction(
     async (tx) => {
-      // Lock transacional global enquanto não há login; serializa saldo e bônus entre instâncias.
-      await tx.execute(sql`select pg_advisory_xact_lock(724681, 1)`);
+      // O lock pertence ao usuário. Colisões de hash só causam espera adicional.
+      await tx.execute(userLedgerLock(user));
       const [activity] = await tx
         .select({ id: activities.id })
         .from(activities)
@@ -168,6 +194,8 @@ async function recordActivity(
         .where(
           and(
             eq(activities.id, id),
+            eq(activities.userId, userId),
+            eq(routines.userId, userId),
             isNull(activities.archivedAt),
             isNull(routines.archivedAt),
             sql`(${routines.weekdays} & ${dayBit}) != 0`,
@@ -182,7 +210,7 @@ async function recordActivity(
       const [existing] = await tx
         .select({ status: completions.status })
         .from(completions)
-        .where(and(eq(completions.activityId, id), eq(completions.day, day)))
+        .where(and(eq(completions.userId, userId), eq(completions.activityId, id), eq(completions.day, day)))
         .limit(1);
       if (existing) {
         if (existing.status === status) return false;
@@ -196,7 +224,7 @@ async function recordActivity(
         .selectDistinct({ day: completions.day })
         .from(completions)
         .where(
-          and(eq(completions.status, "completed"), lte(completions.day, day)),
+          and(eq(completions.userId, userId), eq(completions.status, "completed"), lte(completions.day, day)),
         );
       const bonus =
         status === "completed"
@@ -211,6 +239,7 @@ async function recordActivity(
           order: completions.eventOrder,
         })
         .from(completions)
+        .where(eq(completions.userId, userId))
         .orderBy(desc(completions.eventOrder))
         .limit(1);
       const points =
@@ -219,6 +248,7 @@ async function recordActivity(
         .insert(completions)
         .values({
           id: randomUUID(),
+          userId,
           activityId: id,
           day,
           points,
@@ -237,15 +267,20 @@ async function recordActivity(
   );
 }
 
-export async function catalog(db: Database) {
+const activeParentOwned = (userId: string) => sql`exists (select 1 from ${routines} where ${routines.id} = ${activities.routineId} and ${routines.userId} = ${userId})`;
+
+export async function catalog(db: Database, user: CurrentUser) {
+  const userId = authenticatedId(user);
   const [routineRows, activityRows] = await Promise.all([
     db
       .select()
       .from(routines)
+      .where(eq(routines.userId, userId))
       .orderBy(asc(routines.createdAt), asc(routines.id)),
     db
       .select()
       .from(activities)
+      .where(and(eq(activities.userId, userId), activeParentOwned(userId)))
       .orderBy(
         sql`coalesce(${activities.scheduledTime}, '99:99')`,
         asc(activities.createdAt),
@@ -258,9 +293,12 @@ export async function catalog(db: Database) {
   }));
 }
 
-export async function dashboard(db: Database, now = new Date()) {
+export async function dashboard(db: Database,
+  user: CurrentUser, now = new Date()) {
+  const userId = authenticatedId(user);
   const dayBit = 1 << weekdaySP(now);
   const activeToday = and(
+    eq(routines.userId, userId),
     isNull(routines.archivedAt),
     sql`(${routines.weekdays} & ${dayBit}) != 0`,
   );
@@ -275,7 +313,7 @@ export async function dashboard(db: Database, now = new Date()) {
         .select({ activity: activities })
         .from(activities)
         .innerJoin(routines, eq(activities.routineId, routines.id))
-        .where(and(activeToday, isNull(activities.archivedAt)))
+        .where(and(activeToday, eq(activities.userId, userId), isNull(activities.archivedAt)))
         .orderBy(
           sql`coalesce(${activities.scheduledTime}, '99:99')`,
           asc(activities.createdAt),
@@ -284,10 +322,11 @@ export async function dashboard(db: Database, now = new Date()) {
       db
         .select()
         .from(completions)
-        .where(eq(completions.day, dayKey(now))),
+        .where(and(eq(completions.userId, userId), eq(completions.day, dayKey(now)))),
       db
         .select({ value: completions.balanceAfter })
         .from(completions)
+        .where(eq(completions.userId, userId))
         .orderBy(desc(completions.eventOrder))
         .limit(1),
       db
@@ -295,6 +334,7 @@ export async function dashboard(db: Database, now = new Date()) {
         .from(completions)
         .where(
           and(
+            eq(completions.userId, userId),
             eq(completions.status, "completed"),
             lte(completions.day, dayKey(now)),
           ),
@@ -303,6 +343,7 @@ export async function dashboard(db: Database, now = new Date()) {
         .select({ event: completions, activityName: activities.name })
         .from(completions)
         .innerJoin(activities, eq(completions.activityId, activities.id))
+        .where(and(eq(completions.userId, userId), eq(activities.userId, userId)))
         .orderBy(desc(completions.eventOrder))
         .limit(30),
     ]);

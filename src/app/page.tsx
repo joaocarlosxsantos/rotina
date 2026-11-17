@@ -1,3 +1,5 @@
+import { requireCurrentUser } from "../auth/server";
+import { signOut } from "../app/auth-actions";
 import { getDatabase } from "../db/client";
 import { dashboard } from "../lib/store";
 import {
@@ -25,8 +27,9 @@ export default async function Home({
 }: {
   searchParams: Promise<{ error?: string; success?: string }>;
 }) {
+  const user = await requireCurrentUser();
   const now = new Date();
-  const data = await dashboard(await getDatabase(), now);
+  const data = await dashboard(await getDatabase(), user, now);
   const query = await searchParams;
   const progress = data.total ? Math.round((data.done / data.total) * 100) : 0;
   const date = new Intl.DateTimeFormat("pt-BR", {
@@ -55,6 +58,7 @@ export default async function Home({
             Hoje
           </Link>
           <Link href="/rotinas">Gerenciar rotinas</Link>
+          <form action={signOut}><button className="logout" type="submit">Sair</button></form>
         </nav>
       </header>
       <main>

@@ -1,3 +1,5 @@
+import { requireCurrentUser } from "../../auth/server";
+import { signOut } from "../../app/auth-actions";
 import Link from "next/link";
 import { getDatabase } from "../../db/client";
 import { catalog } from "../../lib/store";
@@ -20,7 +22,8 @@ export default async function Manage({
 }: {
   searchParams: Promise<{ error?: string; success?: string }>;
 }) {
-  const rows = await catalog(await getDatabase());
+  const user = await requireCurrentUser();
+  const rows = await catalog(await getDatabase(), user);
   const query = await searchParams;
   const active = rows.filter((row) => row.archivedAt === null);
   const archived = rows.filter((row) => row.archivedAt !== null);
@@ -39,6 +42,7 @@ export default async function Manage({
           <Link href="/rotinas" aria-current="page">
             Gerenciar rotinas
           </Link>
+          <form action={signOut}><button className="logout" type="submit">Sair</button></form>
         </nav>
       </header>
       <main className="manage" id="gerenciar">

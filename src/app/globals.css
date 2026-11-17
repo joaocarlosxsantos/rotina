@@ -868,3 +868,24 @@ summary:focus-visible {
     margin-top: 20px;
   }
 }
+
+/* Acesso: mesma paleta, fontes locais e controles de 48px do app. */
+.auth-page { max-width: 520px; margin: 28px auto 64px; padding: 0 24px; }
+.auth-page h1 { font-size: clamp(2.2rem, 7vw, 3rem); line-height: 1.1; }
+.auth-page > p { margin: 16px 0 28px; }
+.auth-form { display: grid; gap: 20px; }
+.auth-form label { display: block; margin-bottom: 6px; }
+.auth-form .notice { margin: 0; }
+.auth-form > button { width: 100%; }
+.auth-alternative { margin: 0; text-align: center; font-family: Arial, Helvetica, sans-serif; }
+.password-tools { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.password-toggle, .logout { background: transparent; color: var(--green); border-color: transparent; padding: 8px; }
+.password-toggle { font-size: 0.8rem; }
+.password-toggle:hover:not(:disabled), .logout:hover:not(:disabled) { background: var(--pale); }
+.topbar nav { flex-wrap: wrap; }
+.topbar nav form { margin: 0; }
+@media (max-width: 650px) {
+  .topbar:not(.auth-topbar) { height: auto; min-height: 100px; padding-block: 12px; flex-wrap: wrap; gap: 4px 16px; }
+  .topbar:not(.auth-topbar) nav { width: 100%; gap: 16px; }
+  .auth-page { margin-top: 20px; padding-inline: 20px; }
+}

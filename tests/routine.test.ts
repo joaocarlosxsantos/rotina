@@ -1,3 +1,4 @@
+import { TEST_USER } from "./helpers";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { mkdtemp, rm, mkdir } from "node:fs/promises";
@@ -29,47 +30,47 @@ test("rotina persiste, pontua uma vez por dia e renova atividades sem perder pon
   let connection = await createDatabase(url);
   try {
     await migrateDatabase(connection);
-    const routine = await addRoutine(connection.db, "  Minha manhã  ");
-    const activity = await addActivity(connection.db, routine.id, "Caminhar");
+    const routine = await addRoutine(connection.db, TEST_USER, "  Minha manhã  ");
+    const activity = await addActivity(connection.db, TEST_USER, routine.id, "Caminhar");
     const today = new Date("2026-11-17T14:00:00Z");
-    assert.equal((await dashboard(connection.db, today)).mood, "triste");
+    assert.equal((await dashboard(connection.db, TEST_USER, today)).mood, "triste");
     const results = await Promise.all([
-      completeActivity(connection.db, activity.id, today),
-      completeActivity(connection.db, activity.id, today),
+      completeActivity(connection.db, TEST_USER, activity.id, today),
+      completeActivity(connection.db, TEST_USER, activity.id, today),
     ]);
     assert.deepEqual(results.toSorted(), [false, true]);
     assert.equal(
       completionMessage(results.find((completed) => !completed)!),
       "Já concluída hoje",
     );
-    const replay = await completeActivity(connection.db, activity.id, today);
+    const replay = await completeActivity(connection.db, TEST_USER, activity.id, today);
     assert.equal(replay, false);
     assert.equal(completionMessage(replay), "Já concluída hoje");
     assert.doesNotMatch(completionMessage(replay), /Conclusão registrada/);
     assert.match(completionMessage(true), /^Conclusão registrada/);
-    const state = await dashboard(connection.db, today);
+    const state = await dashboard(connection.db, TEST_USER, today);
     assert.equal(state.points, POINTS_PER_ACTIVITY);
     assert.equal(state.done, 1);
     assert.equal(state.mood, "feliz");
     assert.equal(state.routines[0].name, "Minha manhã");
     await connection.close();
     connection = await createDatabase(url);
-    assert.equal((await dashboard(connection.db, today)).points, 10);
+    assert.equal((await dashboard(connection.db, TEST_USER, today)).points, 10);
     const tomorrow = new Date("2026-11-18T14:00:00Z");
-    const next = await dashboard(connection.db, tomorrow);
+    const next = await dashboard(connection.db, TEST_USER, tomorrow);
     assert.equal(next.done, 0);
     assert.equal(next.points, 10);
     assert.equal(next.mood, "triste");
-    await completeActivity(connection.db, activity.id, tomorrow);
-    assert.equal((await dashboard(connection.db, tomorrow)).points, 21);
+    await completeActivity(connection.db, TEST_USER, activity.id, tomorrow);
+    assert.equal((await dashboard(connection.db, TEST_USER, tomorrow)).points, 21);
     await assert.rejects(
-      () => addActivity(connection.db, "invalid", "Teste"),
+      () => addActivity(connection.db, TEST_USER, "invalid", "Teste"),
       InputError,
     );
     await assert.rejects(
       () =>
         addActivity(
-          connection.db,
+          connection.db, TEST_USER,
           "12345678-1234-4234-8234-123456789abc",
           "Teste",
         ),
@@ -78,7 +79,7 @@ test("rotina persiste, pontua uma vez por dia e renova atividades sem perder pon
     await assert.rejects(
       () =>
         completeActivity(
-          connection.db,
+          connection.db, TEST_USER,
           "12345678-1234-4234-8234-123456789abc",
           today,
         ),
