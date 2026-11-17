@@ -1,6 +1,13 @@
 import { requireCurrentUser } from "../../auth/server";
 import { getDatabase } from "../../db/client";
-import { getCalendarFeed, getTodayBoundsSP, isValidCalendarHtmlLink } from "../../lib/calendar/store";
+import {
+  getCalendarFeed,
+  getSPEndDayForTimedEvent,
+  getSPDateString,
+  getTodayBoundsSP,
+  isValidCalendarHtmlLink,
+  MAX_FEED_EVENTS_TOTAL,
+} from "../../lib/calendar/store";
 import { TIME_ZONE } from "../../lib/rules";
 import { Header } from "../header";
 import { removeCalendarAccountAction } from "./actions";
@@ -165,6 +172,12 @@ export default async function CalendarPage({
                 </span>
               </div>
 
+              {feed.events.length >= MAX_FEED_EVENTS_TOTAL && (
+                <p className="calendar-limit-notice" role="status">
+                  Mostrando os {MAX_FEED_EVENTS_TOTAL} primeiros eventos.
+                </p>
+              )}
+
               {feed.accounts.length === 0 ? (
                 <div className="empty calendar-empty">
                   <h3>Nenhuma conta Google conectada.</h3>
@@ -217,17 +230,39 @@ export default async function CalendarPage({
                                 ? event.htmlLink
                                 : null;
 
+                            // Formatação de horário refinada para eventos multi-dia com horário
+                            const evStartDay = getSPDateString(event.startTime);
+                            const evEndDay = event.endTime
+                              ? getSPEndDayForTimedEvent(event.endTime)
+                              : evStartDay;
+
+                            let timePrimary = startFormatted;
+                            let timeSecondary = endFormatted ? `até ${endFormatted}` : null;
+
+                            if (event.isMultiDay && !event.isAllDay) {
+                              if (dayKey > evStartDay && dayKey < evEndDay) {
+                                timePrimary = "Continua";
+                                timeSecondary = "dia inteiro";
+                              } else if (dayKey > evStartDay && dayKey === evEndDay) {
+                                timePrimary = `Até ${endFormatted ?? "fim"}`;
+                                timeSecondary = "término";
+                              } else if (dayKey === evStartDay && dayKey < evEndDay) {
+                                timePrimary = startFormatted;
+                                timeSecondary = "início";
+                              }
+                            }
+
                             return (
                               <li
-                                key={event.id}
+                                key={`${event.id}-${event.calendarId}-${dayKey}`}
                                 className={`calendar-event-card ${
                                   event.isSpecialCalendar ? "event-special-card" : ""
                                 }`}
                               >
                                 <div className="event-time-col">
-                                  <strong className="event-start-time">{startFormatted}</strong>
-                                  {endFormatted && (
-                                    <span className="event-end-time">até {endFormatted}</span>
+                                  <strong className="event-start-time">{timePrimary}</strong>
+                                  {timeSecondary && (
+                                    <span className="event-end-time">{timeSecondary}</span>
                                   )}
                                 </div>
 
@@ -238,6 +273,13 @@ export default async function CalendarPage({
                                       className="event-calendar-badge"
                                       title={`Calendário: ${event.calendarName}`}
                                     >
+                                      {event.calendarColor && (
+                                        <span
+                                          className="event-color-dot"
+                                          style={{ backgroundColor: event.calendarColor }}
+                                          aria-hidden="true"
+                                        />
+                                      )}
                                       📅 {event.calendarName}
                                     </span>
                                     {event.isMultiDay && (

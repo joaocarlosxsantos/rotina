@@ -66,12 +66,18 @@ export const MAX_FEED_EVENTS_TOTAL = 60;
 export const CALENDAR_FEED_TIMEOUT_MS = 8000;
 export const CALENDAR_CONCURRENCY_LIMIT = 6;
 export const CALENDAR_CACHE_TTL_MS = 60_000;
+export const MAX_FEED_CACHE_ENTRIES = 200;
 
 interface CacheEntry {
   timestamp: number;
   result: CalendarFeedResult;
 }
 
+/**
+ * Nota de arquitetura (R4): feedCache armazena feeds em memória na instância do processo.
+ * Em deployment com múltiplas instâncias serverless, a invalidação opera na instância local,
+ * mantendo o isolamento por user_id e TTL curto de 60s como limite de defasagem.
+ */
 const feedCache = new Map<string, CacheEntry>();
 
 /**
@@ -83,6 +89,30 @@ export function invalidateCalendarCache(userId?: string): void {
   } else {
     feedCache.clear();
   }
+}
+
+/**
+ * Registra o feed completo no cache do usuário, executando sweep de expirados e controle de teto (R2).
+ */
+export function setFeedCache(userId: string, result: CalendarFeedResult): void {
+  const now = Date.now();
+  // Sweep de entradas expiradas
+  for (const [key, entry] of feedCache.entries()) {
+    if (now - entry.timestamp > CALENDAR_CACHE_TTL_MS) {
+      feedCache.delete(key);
+    }
+  }
+  // Teto máximo de entradas: remove a mais antiga se atingir o limite
+  while (feedCache.size >= MAX_FEED_CACHE_ENTRIES) {
+    const oldestKey = feedCache.keys().next().value;
+    if (!oldestKey) break;
+    feedCache.delete(oldestKey);
+  }
+  feedCache.set(userId, { timestamp: now, result });
+}
+
+export function getFeedCacheSize(): number {
+  return feedCache.size;
 }
 
 /**
@@ -248,36 +278,72 @@ export function subtractDays(dateStr: string, days = 1): string {
 /**
  * Calcula a data civil de término em SP para um evento com horário.
  * Se terminar exatamente às 00:00:00 (meia-noite exclusiva), considera o dia anterior.
+ * B7: Se a data for inválida, retorna string vazia.
  */
 export function getSPEndDayForTimedEvent(endIso: string): string {
-  const d = new Date(endIso);
-  const spDateStr = getSPDateString(d);
+  const spDateStr = getSPDateString(endIso);
+  if (!spDateStr) return "";
 
-  const timeStr = new Intl.DateTimeFormat("en-US", {
-    timeZone: TIME_ZONE,
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  }).format(d);
+  try {
+    const d = new Date(endIso);
+    const timeStr = new Intl.DateTimeFormat("en-US", {
+      timeZone: TIME_ZONE,
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    }).format(d);
 
-  if (timeStr === "00:00:00" || timeStr === "24:00:00") {
-    return subtractDays(spDateStr, 1);
+    if (timeStr === "00:00:00" || timeStr === "24:00:00") {
+      return subtractDays(spDateStr, 1);
+    }
+    return spDateStr;
+  } catch {
+    return spDateStr;
   }
-  return spDateStr;
 }
 
 /**
  * Extrai a representação da data civil em São Paulo (formato YYYY-MM-DD).
+ * B7: Se a data for inválida ou não puder ser processada, retorna string vazia.
  */
 export function getSPDateString(dateOrIso: string | Date): string {
-  const d = typeof dateOrIso === "string" ? new Date(dateOrIso) : dateOrIso;
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: TIME_ZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(d);
+  try {
+    const d = typeof dateOrIso === "string" ? new Date(dateOrIso) : dateOrIso;
+    if (Number.isNaN(d.getTime())) {
+      return "";
+    }
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: TIME_ZONE,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(d);
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Deriva dinamicamente o offset do fuso horário de São Paulo (B6).
+ * No Brasil (America/Sao_Paulo), o horário de verão foi revogado pelo Decreto 9.772/2019,
+ * mantendo UTC-3 constante. A derivação via Intl garante conformidade caso regras futuras mudem.
+ */
+export function getTimeZoneOffsetSP(date = new Date()): string {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: TIME_ZONE,
+      timeZoneName: "longOffset",
+    }).formatToParts(date);
+    const tzPart = parts.find((p) => p.type === "timeZoneName");
+    if (tzPart && tzPart.value.startsWith("GMT")) {
+      const raw = tzPart.value.slice(3); // "+00:00", "-03:00", etc.
+      return raw || "-03:00";
+    }
+  } catch {
+    // Fallback padrão de São Paulo
+  }
+  return "-03:00";
 }
 
 /**
@@ -305,8 +371,12 @@ export function getCalendarWindowSP(now = new Date(), daysAhead = 7): CalendarWi
   const endDayDate = new Date(Date.UTC(y, m - 1, d + daysAhead, 12, 0, 0));
   const endDateStr = formatter.format(endDayDate);
 
-  const timeMin = `${todayStr}T00:00:00-03:00`;
-  const timeMax = `${endDateStr}T00:00:00-03:00`;
+  // B6: Derivação de offset via Intl para início e término
+  const startOffset = getTimeZoneOffsetSP(new Date(`${todayStr}T12:00:00Z`));
+  const endOffset = getTimeZoneOffsetSP(new Date(`${endDateStr}T12:00:00Z`));
+
+  const timeMin = `${todayStr}T00:00:00${startOffset}`;
+  const timeMax = `${endDateStr}T00:00:00${endOffset}`;
 
   return {
     timeMin,
@@ -396,7 +466,7 @@ export async function getCalendarFeed(
       accountErrors: {},
       window,
     };
-    feedCache.set(userId, { timestamp: Date.now(), result: emptyResult });
+    setFeedCache(userId, emptyResult);
     return emptyResult;
   }
 
@@ -431,8 +501,13 @@ export async function getCalendarFeed(
           clientId: config.clientId,
           clientSecret: config.clientSecret,
           fetchFn,
+          signal: globalAbortController.signal,
         });
       } catch (err) {
+        if (globalAbortController.signal.aborted) {
+          isPartial = true;
+          break;
+        }
         if (err instanceof GoogleOAuthError && err.isInvalidGrant) {
           accountErrors[account.id] = "Autorização expirada ou revogada. Reconecte a conta.";
         } else {
@@ -466,10 +541,11 @@ export async function getCalendarFeed(
               Authorization: `Bearer ${accessToken}`,
               Accept: "application/json",
             },
-            signal: AbortSignal.timeout(5000),
+            signal: AbortSignal.any([AbortSignal.timeout(5000), globalAbortController.signal]),
           });
 
           if (!calListRes.ok) {
+            isPartial = true;
             // M3: NUNCA loga nomes nem resumos
             console.error(`Falha ao listar calendários: status=${calListRes.status}`);
             break;
@@ -514,6 +590,7 @@ export async function getCalendarFeed(
           calPage++;
           if (!calPageToken) break;
         } catch {
+          isPartial = true;
           break;
         }
       }
@@ -577,10 +654,11 @@ export async function getCalendarFeed(
                 Authorization: `Bearer ${accessToken}`,
                 Accept: "application/json",
               },
-              signal: AbortSignal.timeout(5000),
+              signal: AbortSignal.any([AbortSignal.timeout(5000), globalAbortController.signal]),
             });
 
             if (!res.ok) {
+              isPartial = true;
               // M3: NUNCA loga nome de calendário nem evento; loga só status e hash curto
               const calHash = createHash("sha256").update(cal.id).digest("hex").slice(0, 8);
               console.error(`Falha ao buscar eventos: status=${res.status} cal_hash=${calHash}`);
@@ -604,7 +682,8 @@ export async function getCalendarFeed(
               const rawStart = item.start?.dateTime ?? item.start?.date ?? "";
               if (!rawStart) continue;
 
-              const isAllDay = cal.isSpecial || Boolean(item.start?.date && !item.start?.dateTime);
+              // B5: isAllDay só para eventos genuinamente de dia inteiro (start.date sem dateTime)
+              const isAllDay = Boolean(item.start?.date && !item.start?.dateTime);
               const rawEnd = item.end?.dateTime ?? item.end?.date;
 
               // B3: dedupe por iCalUID+start e trata item.id ausente sem colapsar chaves
@@ -617,6 +696,7 @@ export async function getCalendarFeed(
 
               if (isAllDay) {
                 startDayStr = item.start?.date ?? getSPDateString(rawStart);
+                if (!startDayStr) continue; // B7 guard: ignora se data inválida
                 const rawEndDate = item.end?.date;
                 if (rawEndDate && rawEndDate > startDayStr) {
                   // Dia inteiro: end.date é exclusivo (último dia = end - 1)
@@ -626,8 +706,9 @@ export async function getCalendarFeed(
                 }
               } else {
                 startDayStr = getSPDateString(rawStart);
+                if (!startDayStr) continue; // B7 guard: ignora se data inválida
                 lastDayStr = rawEnd ? getSPEndDayForTimedEvent(rawEnd) : startDayStr;
-                if (lastDayStr < startDayStr) {
+                if (!lastDayStr || lastDayStr < startDayStr) {
                   lastDayStr = startDayStr;
                 }
               }
@@ -688,6 +769,7 @@ export async function getCalendarFeed(
             evPage++;
             if (!evPageToken) break;
           } catch {
+            isPartial = true;
             const calHash = createHash("sha256").update(cal.id).digest("hex").slice(0, 8);
             console.error(`Erro de conexão ao buscar eventos: cal_hash=${calHash}`);
             break;
@@ -733,7 +815,10 @@ export async function getCalendarFeed(
     isPartial,
   };
 
-  feedCache.set(userId, { timestamp: Date.now(), result: finalResult });
+  // R1: Não cacheie resultado PARCIAL (isPartial/timeout): só cache de feed completo
+  if (!isPartial) {
+    setFeedCache(userId, finalResult);
+  }
 
   return finalResult;
 }

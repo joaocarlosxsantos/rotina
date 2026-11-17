@@ -219,11 +219,13 @@ export async function refreshGoogleAccessToken({
   clientId,
   clientSecret,
   fetchFn = fetch,
+  signal,
 }: {
   refreshToken: string;
   clientId: string;
   clientSecret: string;
   fetchFn?: typeof fetch;
+  signal?: AbortSignal;
 }): Promise<string> {
   const body = new URLSearchParams({
     client_id: clientId,
@@ -232,13 +234,17 @@ export async function refreshGoogleAccessToken({
     grant_type: "refresh_token",
   });
 
+  const combinedSignal = signal
+    ? AbortSignal.any([AbortSignal.timeout(5000), signal])
+    : AbortSignal.timeout(5000);
+
   let res: Response;
   try {
     res = await fetchFn("https://oauth2.googleapis.com/token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: body.toString(),
-      signal: AbortSignal.timeout(5000),
+      signal: combinedSignal,
     });
   } catch {
     console.error("Erro de rede ao renovar token Google");
