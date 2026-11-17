@@ -2,16 +2,19 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { randomUUID } from "node:crypto";
 import {
-  mkdtemp,
-  mkdir,
-  readFile,
-  writeFile,
   copyFile,
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
   readdir,
+  realpath,
   rm,
+  writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, relative } from "node:path";
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import { migrate } from "drizzle-orm/libsql/migrator";
 import { createDatabase } from "../src/db/client";
@@ -33,48 +36,169 @@ import {
 } from "../src/lib/rules";
 
 const today = new Date("2026-11-17T14:00:00Z");
+const DRIZZLE_DIR = resolve("drizzle");
 
-test("script cria backup SQLite antes de aplicar a migration local", async () => {
-  const dataRoot = join(process.cwd(), "data");
-  await mkdir(dataRoot, { recursive: true });
-  const folder = await mkdtemp(join(dataRoot, "phase3-backup-test-"));
-  try {
-    const result = spawnSync(
-      process.execPath,
-      ["--import", "tsx", "scripts/migrate.ts"],
-      {
-        encoding: "utf8",
-        env: {
-          ...process.env,
-          NODE_ENV: "test",
-          DATABASE_URL: `file:${join(folder, "test.db").replaceAll("\\", "/")}`,
-        },
+async function tempProject() {
+  const root = await realpath(await mkdtemp(join(tmpdir(), "rotina-phase3-")));
+  await cp(DRIZZLE_DIR, join(root, "drizzle"), { recursive: true });
+  return root;
+}
+
+async function cleanup(root: string) {
+  // O driver sqlite3 libera o arquivo alguns ticks apos close(); no Windows
+  // o unlink imediato falha com EBUSY, entao tentamos de novo com pausa curta.
+  for (let attempt = 0; attempt < 20; attempt++) {
+    try {
+      await rm(root, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      if (attempt === 19) throw error;
+      await new Promise<void>((done) => setTimeout(done, 200));
+    }
+  }
+}
+
+function runMigrate(root: string, env: Record<string, string> = {}) {
+  return spawnSync(
+    process.execPath,
+    [
+      "--import",
+      pathToFileURL(resolve("node_modules/tsx/dist/loader.mjs")).href,
+      resolve("scripts/migrate.ts"),
+    ],
+    {
+      cwd: root,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        NODE_ENV: "test",
+        DATABASE_URL: "file:./data/test.db",
+        ...env,
       },
-    );
+    },
+  );
+}
+
+async function backupFiles(root: string) {
+  return (await readdir(join(root, "data"))).filter(
+    (file) => file.startsWith("test.db.backup-") && file.endsWith(".db"),
+  );
+}
+
+const PHASE2_SEED = [
+  "INSERT INTO routines(id,name,created_at) VALUES('11111111-1111-4111-8111-111111111111','Rotina da Fase 2',1);",
+  "INSERT INTO activities(id,routine_id,name,created_at) VALUES('22222222-2222-4222-8222-222222222222','11111111-1111-4111-8111-111111111111','Atividade da Fase 2',1);",
+  "INSERT INTO completions(id,activity_id,day,points) VALUES('33333333-3333-4333-8333-333333333333','22222222-2222-4222-8222-222222222222','2026-11-16',10);",
+].join("\n--> statement-breakpoint\n");
+
+async function seedPhase2(root: string) {
+  const folder = join(root, "drizzle");
+  const journalPath = join(folder, "meta", "_journal.json");
+  const journal = JSON.parse(await readFile(journalPath, "utf8")) as {
+    entries: Array<{ tag: string }>;
+  };
+  const secondSql = join(folder, `${journal.entries[1].tag}.sql`);
+  await writeFile(
+    secondSql,
+    `${await readFile(secondSql, "utf8")}\n--> statement-breakpoint\n${PHASE2_SEED}`,
+  );
+  await writeFile(
+    journalPath,
+    JSON.stringify({ ...journal, entries: journal.entries.slice(0, 2) }),
+  );
+  const seed = runMigrate(root);
+  assert.equal(seed.status, 0, seed.stderr);
+  for (const file of await backupFiles(root))
+    await rm(join(root, "data", file), { force: true });
+  await writeFile(journalPath, JSON.stringify(journal));
+}
+
+
+test("script cria backup com os dados da Fase 2 e sem a coluna balance_after", async () => {
+  const root = await tempProject();
+  try {
+    await seedPhase2(root);
+    const result = runMigrate(root);
     assert.equal(result.status, 0, result.stderr);
     assert.ok(
       result.stdout.indexOf("Backup SQLite local criado") <
         result.stdout.indexOf("Migrations aplicadas"),
     );
-    const files = await readdir(folder);
-    const backups = files.filter((file) => file.startsWith("test.db.backup-"));
+    const backups = await backupFiles(root);
     assert.equal(backups.length, 1);
-    const backup = await readFile(join(folder, backups[0]));
-    const migrated = await readFile(join(folder, "test.db"));
+    const backup = await readFile(join(root, "data", backups[0]));
     assert.equal(backup.subarray(0, 16).toString(), "SQLite format 3\u0000");
+    assert.ok(backup.includes(Buffer.from("Rotina da Fase 2")));
+    assert.ok(backup.includes(Buffer.from("Atividade da Fase 2")));
     assert.equal(backup.includes(Buffer.from("balance_after")), false);
-    assert.equal(migrated.includes(Buffer.from("balance_after")), true);
+    assert.equal(backup.includes(Buffer.from("event_order")), false);
+
+    const migrated = await readFile(join(root, "data", "test.db"));
+    assert.ok(migrated.includes(Buffer.from("balance_after")));
+    assert.ok(migrated.includes(Buffer.from("event_order")));
+    assert.ok(migrated.includes(Buffer.from("Rotina da Fase 2")));
   } finally {
-    const folderWithinData = relative(dataRoot, folder);
-    assert.ok(!folderWithinData.startsWith("..") && folderWithinData !== "");
-    await rm(folder, {
-      recursive: true,
-      force: true,
-      maxRetries: 5,
-      retryDelay: 100,
-    });
+    await cleanup(root);
   }
 });
+
+test("falha de backup impede a migration e deixa o banco intacto", async () => {
+  const root = await tempProject();
+  try {
+    await mkdir(join(root, "data"), { recursive: true });
+    const dbPath = join(root, "data", "test.db");
+    const corrupt = Buffer.from("isto nao e um banco SQLite valido");
+    await writeFile(dbPath, corrupt);
+    const result = runMigrate(root);
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /Backup do banco falhou; migration cancelada/,
+    );
+    assert.deepEqual(await readFile(dbPath), corrupt);
+    assert.equal((await backupFiles(root)).length, 0);
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("nao cria backup quando nao ha migration pendente", async () => {
+  const root = await tempProject();
+  try {
+    const first = runMigrate(root);
+    assert.equal(first.status, 0, first.stderr);
+    assert.equal((await backupFiles(root)).length, 1);
+    const second = runMigrate(root);
+    assert.equal(second.status, 0, second.stderr);
+    assert.equal(second.stdout.includes("Backup SQLite local criado"), false);
+    assert.equal((await backupFiles(root)).length, 1);
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("mantem somente os cinco backups mais recentes", async () => {
+  const root = await tempProject();
+  try {
+    await seedPhase2(root);
+    const dummies = Array.from(
+      { length: 7 },
+      (_, index) => `test.db.backup-${1700000000000 + index}-0000000${index}.db`,
+    );
+    for (const file of dummies)
+      await writeFile(join(root, "data", file), "");
+    const result = runMigrate(root);
+    assert.equal(result.status, 0, result.stderr);
+    const backups = (await backupFiles(root)).sort();
+    assert.equal(backups.length, 5);
+    for (const removed of dummies.slice(0, 3))
+      assert.equal(backups.includes(removed), false);
+    for (const kept of dummies.slice(3)) assert.ok(backups.includes(kept));
+  } finally {
+    await cleanup(root);
+  }
+});
+
 async function withDatabase(
   work: (db: ReturnType<typeof createDatabase>["db"]) => Promise<void>,
 ) {
