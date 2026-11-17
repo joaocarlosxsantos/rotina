@@ -1,5 +1,7 @@
 type PetSpriteProps = {
   size?: number;
+  className?: string;
+  label?: string;
 };
 
 type Mood = "sad" | "ok" | "happy";
@@ -114,16 +116,24 @@ function PixelRect({ x, y, fill }: { x: number; y: number; fill: string }) {
   );
 }
 
-function Sprite({ size, mood }: PetSpriteProps & { mood: Mood }) {
+function Sprite({
+  size,
+  className,
+  label,
+  mood,
+}: PetSpriteProps & { mood: Mood }) {
   const pixels = normalizeSize(size);
   const face = FACES[mood];
 
   return (
     <svg
+      className={className}
       width={pixels}
       height={pixels}
       viewBox="0 0 16 16"
-      aria-hidden="true"
+      role={label ? "img" : undefined}
+      aria-label={label}
+      aria-hidden={label ? undefined : "true"}
       focusable="false"
       shapeRendering="crispEdges"
     >
@@ -148,14 +158,16 @@ function Sprite({ size, mood }: PetSpriteProps & { mood: Mood }) {
   );
 }
 
-export function PetSad({ size }: PetSpriteProps) {
-  return <Sprite mood="sad" size={size} />;
+export function PetSad({ size, className, label }: PetSpriteProps) {
+  return <Sprite mood="sad" size={size} className={className} label={label} />;
 }
 
-export function PetOk({ size }: PetSpriteProps) {
-  return <Sprite mood="ok" size={size} />;
+export function PetOk({ size, className, label }: PetSpriteProps) {
+  return <Sprite mood="ok" size={size} className={className} label={label} />;
 }
 
-export function PetHappy({ size }: PetSpriteProps) {
-  return <Sprite mood="happy" size={size} />;
+export function PetHappy({ size, className, label }: PetSpriteProps) {
+  return (
+    <Sprite mood="happy" size={size} className={className} label={label} />
+  );
 }
