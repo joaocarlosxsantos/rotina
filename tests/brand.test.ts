@@ -7,6 +7,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { NextRequest } from 'next/server';
 import { Logo, LogoMark } from '../src/app/brand';
 import { AuthPage } from '../src/app/auth-page';
+import { AuthForm } from '../src/app/auth-form';
 import manifest from '../src/app/manifest';
 import { proxy, config, isPublicAsset } from '../src/proxy';
 import { routeRedirect } from '../src/auth/contracts';
@@ -171,7 +172,7 @@ test('Contraste de cores atende integralmente ao padrão WCAG AA em ambos os tem
 test('Layout e estilos globais garantem responsividade móvel sem overflow e suporte a reduced-motion', () => {
   const css = fs.readFileSync(path.join(ROOT, 'src', 'app', 'globals.css'), 'utf8');
 
-  // Prevenção de overflow horizontal
+  // Prevenção de overflow horizontal em 360px, 390px e desktop 1280px
   assert.ok(css.includes('overflow-x: hidden'), 'globals.css deve definir overflow-x: hidden');
   assert.ok(css.includes('max-width: 100vw'), 'globals.css deve limitar largura máxima a 100vw');
 
@@ -227,4 +228,81 @@ test('src/app/actions.ts usa mensagem neutra sem expor termos internos de infrae
   const actionsSource = fs.readFileSync(path.join(ROOT, 'src', 'app', 'actions.ts'), 'utf8');
   assert.ok(!actionsSource.includes('banco local'), 'actions.ts não deve citar "banco local"');
   assert.ok(actionsSource.includes('Não foi possível salvar.'), 'actions.ts deve conter mensagem neutra');
+});
+
+test('Tokens de cor dos campos de formulário atendem aos requisitos de contraste AA nos temas claro e escuro', () => {
+  const css = fs.readFileSync(path.join(ROOT, 'src', 'app', 'globals.css'), 'utf8');
+
+  // Extrai tokens definidos no CSS
+  function extractToken(varName: string, contextCss: string): string {
+    const regex = new RegExp(`${varName}:\\s*([^;]+);`);
+    const match = contextCss.match(regex);
+    assert.ok(match, `Token ${varName} deve estar definido no CSS`);
+    return match[1].trim();
+  }
+
+  // Bloco modo claro (:root)
+  const rootBlock = css.split('@media (prefers-color-scheme: dark)')[0];
+  const lightBg = extractToken('--input-bg', rootBlock);
+  const lightText = extractToken('--input-text', rootBlock);
+  const lightBorder = extractToken('--input-border', rootBlock);
+  const lightPlaceholder = extractToken('--input-placeholder', rootBlock);
+
+  const lightTextContrast = contrastRatio(lightText, lightBg);
+  assert.ok(lightTextContrast >= 4.5, `Texto digitado no modo claro deve ter contraste >= 4.5:1 (obtido: ${lightTextContrast.toFixed(2)})`);
+
+  const lightBorderContrast = contrastRatio(lightBorder, lightBg);
+  assert.ok(lightBorderContrast >= 3.0, `Borda no modo claro deve ter contraste >= 3.0:1 (obtido: ${lightBorderContrast.toFixed(2)})`);
+
+  const lightPlaceholderContrast = contrastRatio(lightPlaceholder, lightBg);
+  assert.ok(lightPlaceholderContrast >= 4.5, `Placeholder no modo claro deve ter contraste >= 4.5:1 (obtido: ${lightPlaceholderContrast.toFixed(2)})`);
+
+  // Bloco modo escuro
+  const darkBlock = css.split('@media (prefers-color-scheme: dark)')[1].split('}')[0] + '}';
+  const darkBg = extractToken('--input-bg', darkBlock);
+  const darkText = extractToken('--input-text', darkBlock);
+  const darkBorder = extractToken('--input-border', darkBlock);
+  const darkPlaceholder = extractToken('--input-placeholder', darkBlock);
+
+  const darkTextContrast = contrastRatio(darkText, darkBg);
+  assert.ok(darkTextContrast >= 4.5, `Texto digitado no modo escuro deve ter contraste >= 4.5:1 (obtido: ${darkTextContrast.toFixed(2)})`);
+
+  const darkBorderContrast = contrastRatio(darkBorder, darkBg);
+  assert.ok(darkBorderContrast >= 3.0, `Borda no modo escuro deve ter contraste >= 3.0:1 (obtido: ${darkBorderContrast.toFixed(2)})`);
+
+  const darkPlaceholderContrast = contrastRatio(darkPlaceholder, darkBg);
+  assert.ok(darkPlaceholderContrast >= 4.5, `Placeholder no modo escuro deve ter contraste >= 4.5:1 (obtido: ${darkPlaceholderContrast.toFixed(2)})`);
+
+  // Regras de autofill, tamanho de fonte e foco no CSS
+  assert.ok(css.includes('-webkit-autofill'), 'globals.css deve conter regras para -webkit-autofill');
+  assert.ok(css.includes(':autofill'), 'globals.css deve conter regras para :autofill');
+  assert.ok(css.includes('-webkit-text-fill-color'), 'Autofill deve fixar a cor do texto digitado');
+  assert.ok(css.includes('font-size: 1rem'), 'Input deve ter fonte >= 16px (1rem) para evitar zoom no iOS');
+  assert.ok(css.includes('min-height: 48px'), 'Input deve ter altura mínima de 48px');
+  assert.ok(css.includes('outline: 3px solid'), 'Foco visível deve ter anel de 3px');
+});
+
+test('Campos do formulário AuthForm possuem atributos acessíveis, labels visíveis e autocomplete correto', () => {
+  const formHtml = renderToStaticMarkup(React.createElement(AuthForm, { signup: true }));
+  const formLower = formHtml.toLowerCase();
+
+  // Labels visíveis e associados por for / id
+  assert.ok(formLower.includes('for="auth-name"') && formLower.includes('id="auth-name"'), 'Campo nome deve ter label associado');
+  assert.ok(formLower.includes('for="auth-email"') && formLower.includes('id="auth-email"'), 'Campo email deve ter label associado');
+  assert.ok(formLower.includes('for="auth-password"') && formLower.includes('id="auth-password"'), 'Campo senha deve ter label associado');
+
+  // Autocomplete correto
+  assert.ok(formLower.includes('autocomplete="name"'), 'Nome deve ter autocomplete="name"');
+  assert.ok(formLower.includes('autocomplete="email"'), 'Email deve ter autocomplete="email"');
+  assert.ok(formLower.includes('autocomplete="new-password"'), 'Signup deve ter autocomplete="new-password"');
+
+  const signinHtml = renderToStaticMarkup(React.createElement(AuthForm, { signup: false }));
+  const signinLower = signinHtml.toLowerCase();
+  assert.ok(signinLower.includes('autocomplete="current-password"'), 'Signin deve ter autocomplete="current-password"');
+
+  // Botão mostrar/ocultar senha acessível
+  assert.ok(formHtml.includes('class="password-toggle"'), 'Deve conter botão password-toggle');
+  assert.ok(formHtml.includes('aria-controls="auth-password"'), 'Botão deve controlar o campo de senha');
+  assert.ok(formHtml.includes('aria-pressed="false"'), 'Botão deve ter atributo aria-pressed');
+  assert.ok(formHtml.includes('Mostrar senha'), 'Rótulo padrão em pt-BR deve ser Mostrar senha');
 });
