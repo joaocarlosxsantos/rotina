@@ -1,5 +1,5 @@
 import { authenticatedId, type CurrentUser } from "../../auth/contracts";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import type { Database } from "../../db/client";
 import { calendarAccounts } from "../../db/schema";
@@ -11,6 +11,13 @@ import {
   refreshGoogleAccessToken,
   revokeGoogleToken,
 } from "./oauth";
+
+export class CalendarAccountLimitError extends Error {
+  constructor(message = "Limite máximo de 5 contas Google atingido. Remova uma conta antes de conectar outra.") {
+    super(message);
+    this.name = "CalendarAccountLimitError";
+  }
+}
 
 export interface CalendarAccountView {
   id: string;
@@ -76,40 +83,44 @@ export async function saveCalendarAccount(
 ): Promise<void> {
   const userId = authenticatedId(user);
 
-  // Validação do limite de até 5 contas vinculadas por usuário (B5)
-  const existingAccounts = await db
-    .select({
-      id: calendarAccounts.id,
-      googleSub: calendarAccounts.googleSub,
-    })
-    .from(calendarAccounts)
-    .where(eq(calendarAccounts.userId, userId));
+  await db.transaction(async (tx) => {
+    // Advisory lock transacional por usuário para serialização atômica do limite de contas
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${userId}, 724681))`);
 
-  const isReconnecting = existingAccounts.some((acc) => acc.googleSub === googleSub);
-  if (!isReconnecting && existingAccounts.length >= 5) {
-    throw new Error("Limite máximo de 5 contas Google atingido. Remova uma conta antes de conectar outra.");
-  }
+    const existingAccounts = await tx
+      .select({
+        id: calendarAccounts.id,
+        googleSub: calendarAccounts.googleSub,
+      })
+      .from(calendarAccounts)
+      .where(eq(calendarAccounts.userId, userId));
 
-  const id = randomUUID();
+    const isReconnecting = existingAccounts.some((acc) => acc.googleSub === googleSub);
+    if (!isReconnecting && existingAccounts.length >= 5) {
+      throw new CalendarAccountLimitError();
+    }
 
-  await db
-    .insert(calendarAccounts)
-    .values({
-      id,
-      userId,
-      googleSub,
-      email,
-      refreshTokenEnc,
-      createdAt: new Date(),
-    })
-    .onConflictDoUpdate({
-      target: [calendarAccounts.userId, calendarAccounts.googleSub],
-      set: {
+    const id = randomUUID();
+
+    await tx
+      .insert(calendarAccounts)
+      .values({
+        id,
+        userId,
+        googleSub,
         email,
         refreshTokenEnc,
         createdAt: new Date(),
-      },
-    });
+      })
+      .onConflictDoUpdate({
+        target: [calendarAccounts.userId, calendarAccounts.googleSub],
+        set: {
+          email,
+          refreshTokenEnc,
+          createdAt: new Date(),
+        },
+      });
+  });
 }
 
 export async function deleteCalendarAccount(
