@@ -61,7 +61,7 @@ export async function completeActivity(
   if (!activity)
     throw new InputError("Atividade não encontrada. Atualize a página.");
   // A restrição única é a autoridade contra cliques concorrentes e replay.
-  return db
+  const inserted = await db
     .insert(completions)
     .values({
       id: randomUUID(),
@@ -71,6 +71,7 @@ export async function completeActivity(
     })
     .onConflictDoNothing({ target: [completions.activityId, completions.day] })
     .returning();
+  return inserted.length > 0;
 }
 
 export async function dashboard(db: Database, now = new Date()) {

@@ -1,6 +1,6 @@
 # Rotina Pet
 
-Fase 1: app local individual de gamificação de rotina em Next.js + TypeScript, SQLite local e Drizzle. Cadastre rotinas, adicione atividades e conclua cada uma diariamente para ganhar 10 pontos. O pet fica triste com 0%, ok com progresso abaixo de 70% e feliz a partir de 70%. Sem atividades, fica ok.
+Fase 1: app local individual de gamificação de rotina em Next.js + TypeScript, SQLite local e Drizzle. Cadastre rotinas, adicione atividades e conclua cada uma diariamente para ganhar 10 pontos. O pet fica triste abaixo de 40%, ok de 40% a menos de 70% e feliz a partir de 70%. Sem atividades, fica ok. Conclusões repetidas mostram “Ja concluida hoje” e não geram pontos adicionais.
 
 ## Executar localmente
 

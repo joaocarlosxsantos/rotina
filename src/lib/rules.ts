@@ -3,6 +3,12 @@ export const TIME_ZONE = "America/Sao_Paulo";
 
 export class InputError extends Error {}
 
+export function completionMessage(completed: boolean): string {
+  return completed
+    ? "Conclusão registrada. Cada atividade vale pontos uma vez por dia."
+    : "Ja concluida hoje";
+}
+
 export function validName(value: unknown): string {
   if (typeof value !== "string")
     throw new InputError("Informe um nome de 2 a 80 caracteres.");
@@ -50,6 +56,7 @@ export function petMood(
   total: number,
 ): "feliz" | "ok" | "triste" {
   if (total === 0) return "ok";
-  if (done === 0) return "triste";
-  return done / total >= 0.7 ? "feliz" : "ok";
+  const progress = done / total;
+  if (progress >= 0.7) return "feliz";
+  return progress >= 0.4 ? "ok" : "triste";
 }

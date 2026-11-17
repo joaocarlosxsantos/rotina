@@ -34,6 +34,7 @@ label,
 .daily small,
 .gentle,
 footer {
+  /* Fonte local legível para controles e apoio, sem download externo; títulos usam Georgia. */
   font-family: Arial, Helvetica, sans-serif;
 }
 a {
@@ -43,6 +44,7 @@ a {
 button,
 input {
   font: inherit;
+  /* Reaplica a fonte local após o shorthand font, que reinicia font-family. */
   font-family: Arial, Helvetica, sans-serif;
   font-size: 1rem;
 }
@@ -353,6 +355,7 @@ label span {
   margin-bottom: 10px;
 }
 .pet-home p {
+  /* Texto de apoio do pet mantém a mesma fonte local dos controles. */
   font-family: Arial, sans-serif;
   font-size: 0.88rem;
   color: var(--muted);

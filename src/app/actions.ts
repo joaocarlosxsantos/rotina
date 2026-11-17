@@ -4,12 +4,17 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getDatabase } from "../db/client";
 import { addActivity, addRoutine, completeActivity } from "../lib/store";
-import { InputError } from "../lib/rules";
+import { completionMessage, InputError } from "../lib/rules";
 
-async function mutate(work: () => Promise<unknown>, message: string) {
+async function mutate<T>(
+  work: () => Promise<T>,
+  message: string | ((result: T) => string),
+) {
   let error: string | undefined;
+  let success = "";
   try {
-    await work();
+    const result = await work();
+    success = typeof message === "function" ? message(result) : message;
   } catch (cause) {
     error =
       cause instanceof InputError
@@ -20,7 +25,7 @@ async function mutate(work: () => Promise<unknown>, message: string) {
   }
   if (error) redirect(`/?error=${encodeURIComponent(error)}`);
   revalidatePath("/");
-  redirect(`/?success=${encodeURIComponent(message)}`);
+  redirect(`/?success=${encodeURIComponent(success)}`);
 }
 
 export async function createRoutine(form: FormData) {
@@ -38,6 +43,6 @@ export async function createActivity(form: FormData) {
 export async function finishActivity(form: FormData) {
   await mutate(
     () => completeActivity(getDatabase(), form.get("activityId")),
-    "Conclusão registrada. Cada atividade vale pontos uma vez por dia.",
+    completionMessage,
   );
 }

@@ -1,6 +1,6 @@
 import { getDatabase } from "../db/client";
 import { dashboard } from "../lib/store";
-import { TIME_ZONE } from "../lib/rules";
+import { POINTS_PER_ACTIVITY, TIME_ZONE } from "../lib/rules";
 import { createActivity, createRoutine, finishActivity } from "./actions";
 import { Submit } from "./submit";
 import { Pet } from "./pet";
@@ -13,7 +13,8 @@ export default async function Home({
 }: {
   searchParams: Promise<{ error?: string; success?: string }>;
 }) {
-  const data = await dashboard(getDatabase());
+  const now = new Date();
+  const data = await dashboard(getDatabase(), now);
   const query = await searchParams;
   const progress = data.total ? Math.round((data.done / data.total) * 100) : 0;
   const date = new Intl.DateTimeFormat("pt-BR", {
@@ -21,7 +22,7 @@ export default async function Home({
     weekday: "long",
     day: "numeric",
     month: "long",
-  }).format(new Date());
+  }).format(now);
   const moodCopy = {
     feliz: "Você fez meu dia!",
     ok: "Vamos no seu ritmo.",
@@ -113,8 +114,8 @@ export default async function Home({
                         <span className="activity-name">{activity.name}</span>
                         <span className="activity-points">
                           {activity.done
-                            ? "10 pontos ganhos hoje"
-                            : "+10 pontos"}
+                            ? `${POINTS_PER_ACTIVITY} pontos ganhos hoje`
+                            : `+${POINTS_PER_ACTIVITY} pontos`}
                         </span>
                       </div>
                       <form action={finishActivity}>
