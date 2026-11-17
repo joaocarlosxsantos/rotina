@@ -4,6 +4,8 @@ import { migrate } from "drizzle-orm/libsql/migrator";
 import { createDatabase, localDatabaseUrl } from "../src/db/client";
 
 async function main() {
+  // NODE_ENV nao protege DATABASE_URL: fora de producao, um caminho valido
+  // dentro do projeto continua aceito; a guarda real e a de localizacao.
   if (process.env.NODE_ENV === "production")
     throw new Error("Migration de producao bloqueada nesta fase.");
   let url: string;

@@ -1,9 +1,25 @@
 import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
-import { isAbsolute, relative, resolve, sep } from "node:path";
+import { existsSync, realpathSync } from "node:fs";
+import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import * as schema from "./schema";
 
 const DEFAULT_DATABASE_URL = "file:./data/rotina.db";
+
+function isWithin(root: string, target: string) {
+  const rel = relative(root, target);
+  return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
+}
+
+function realpathOfExistingAncestor(target: string) {
+  let current = target;
+  while (!existsSync(current)) {
+    const parent = dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+  return realpathSync(current);
+}
 
 export function localDatabaseUrl(
   url: string | undefined = process.env.DATABASE_URL,
@@ -16,9 +32,23 @@ export function localDatabaseUrl(
   const filePath = raw.slice("file:".length);
   if (!filePath)
     throw new Error("DATABASE_URL invalida: informe um caminho apos 'file:'.");
+  if (raw.includes("%"))
+    throw new Error(
+      "DATABASE_URL invalida: percent-encoding ('%') nao e permitido no caminho.",
+    );
   if (filePath === ":memory:" || filePath.startsWith(":memory:"))
     throw new Error(
       "DATABASE_URL invalida: banco em memoria nao e permitido; use um arquivo dentro do projeto.",
+    );
+
+  const drivePath = /^[A-Za-z]:/.test(filePath);
+  if (drivePath && !isAbsolute(filePath))
+    throw new Error(
+      "DATABASE_URL invalida: caminho relativo a unidade (drive-relative) nao e permitido.",
+    );
+  if (filePath.indexOf(":", drivePath ? 2 : 0) !== -1)
+    throw new Error(
+      "DATABASE_URL invalida: ':' (fluxo alternativo de dados) nao e permitido no caminho.",
     );
   if (/[?#]/.test(filePath))
     throw new Error(
@@ -33,10 +63,24 @@ export function localDatabaseUrl(
 
   const root = resolve(projectRoot);
   const target = isAbsolute(filePath) ? resolve(filePath) : resolve(root, filePath);
-  const rel = relative(root, target);
-  if (!rel || rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel))
+  if (relative(root, target) === "" || !isWithin(root, target))
     throw new Error(
-      `DATABASE_URL invalida: o banco deve ficar dentro do projeto (${root}).`,
+      "DATABASE_URL invalida: o banco deve ficar dentro do diretorio do projeto.",
+    );
+
+  let realRoot: string;
+  let realAncestor: string;
+  try {
+    realRoot = realpathSync(root);
+    realAncestor = realpathOfExistingAncestor(target);
+  } catch {
+    throw new Error(
+      "DATABASE_URL invalida: nao foi possivel verificar o caminho do banco.",
+    );
+  }
+  if (!isWithin(realRoot, realAncestor))
+    throw new Error(
+      "DATABASE_URL invalida: o banco nao pode apontar (via link) para fora do diretorio do projeto.",
     );
   return raw;
 }
