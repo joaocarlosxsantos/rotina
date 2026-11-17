@@ -8,9 +8,9 @@ import {
   isCalendarCryptoConfigured,
   CryptoError,
 } from "../src/lib/calendar/crypto";
+import { getCalendarConfig, getRedirectUri } from "../src/lib/calendar/config";
 import {
   buildGoogleAuthUrl,
-  decodeIdToken,
   exchangeCodeForTokens,
   generateCodeChallenge,
   generateCodeVerifier,
@@ -18,13 +18,16 @@ import {
   GoogleOAuthError,
   refreshGoogleAccessToken,
   revokeGoogleToken,
+  timingSafeStringEqual,
 } from "../src/lib/calendar/oauth";
 import {
   deleteCalendarAccount,
   getCalendarFeed,
+  isValidCalendarHtmlLink,
   listCalendarAccounts,
   saveCalendarAccount,
 } from "../src/lib/calendar/store";
+import { CALENDAR_ERROR_MESSAGES, CALENDAR_SUCCESS_MESSAGES } from "../src/app/calendario/page";
 import { routeRedirect } from "../src/auth/contracts";
 import { isPublicAsset } from "../src/proxy";
 import { TEST_USER, withDatabase } from "./helpers";
@@ -100,13 +103,111 @@ test("Criptografia AES-256-GCM: round-trip, adulteração e chaves inválidas", 
   assert.throws(() => decryptToken("v2:1:2:3", validKey), CryptoError);
 });
 
+test("Criptografia AES-256-GCM com AAD: integridade vinculada a user_id e google_sub (I1)", () => {
+  const validKey = randomBytes(32).toString("base64");
+  const secretToken = "refresh-token-super-secreto";
+  const aadA = "user-123:sub-google-456";
+  const aadB = "user-999:sub-google-456"; // Outro usuário
+
+  const encrypted = encryptToken(secretToken, validKey, aadA);
+
+  // Decriptação com o mesmo AAD deve ter sucesso
+  const decrypted = decryptToken(encrypted, validKey, aadA);
+  assert.equal(decrypted, secretToken);
+
+  // Decriptação com AAD diferente (ex: ataque de troca de registro entre usuários) deve falhar
+  assert.throws(
+    () => decryptToken(encrypted, validKey, aadB),
+    (err: unknown) => {
+      assert.ok(err instanceof CryptoError);
+      assert.match(err.message, /Falha na autenticação/);
+      return true;
+    },
+  );
+
+  // Decriptação sem AAD quando foi encriptado com AAD deve falhar
+  assert.throws(
+    () => decryptToken(encrypted, validKey),
+    (err: unknown) => {
+      assert.ok(err instanceof CryptoError);
+      return true;
+    },
+  );
+});
+
+test("Comparação de state resistente a timing attacks (M1)", () => {
+  const state = "abcdef1234567890abcdef1234567890";
+  const identical = "abcdef1234567890abcdef1234567890";
+  const differentContent = "abcdef1234567890abcdef1234567891";
+  const differentLength = "abcdef1234567890";
+
+  assert.equal(timingSafeStringEqual(state, identical), true);
+  assert.equal(timingSafeStringEqual(state, differentContent), false);
+  assert.equal(timingSafeStringEqual(state, differentLength), false);
+  assert.equal(timingSafeStringEqual(state, "" as unknown as string), false);
+});
+
+test("Configuração do Calendar e validação de APP_URL em produção (M2)", () => {
+  const testKey = randomBytes(32).toString("base64");
+
+  // 1. Em desenvolvimento: fallback seguro para localhost
+  const devConfig = getCalendarConfig({
+    GOOGLE_CLIENT_ID: "client-id",
+    GOOGLE_CLIENT_SECRET: "client-secret",
+    CALENDAR_TOKEN_KEY: testKey,
+    NODE_ENV: "development",
+  });
+  assert.equal(devConfig.isAvailable, true);
+  assert.equal(devConfig.appUrl, "http://localhost:3000");
+
+  // 2. Em produção sem APP_URL: não cai em localhost e fica indisponível
+  const prodWithoutAppUrl = getCalendarConfig({
+    GOOGLE_CLIENT_ID: "client-id",
+    GOOGLE_CLIENT_SECRET: "client-secret",
+    CALENDAR_TOKEN_KEY: testKey,
+    NODE_ENV: "production",
+  });
+  assert.equal(prodWithoutAppUrl.isAvailable, false);
+  assert.equal(prodWithoutAppUrl.appUrl, "");
+
+  // 3. Em produção com APP_URL explícita: disponível e usa a APP_URL
+  const prodWithAppUrl = getCalendarConfig({
+    GOOGLE_CLIENT_ID: "client-id",
+    GOOGLE_CLIENT_SECRET: "client-secret",
+    CALENDAR_TOKEN_KEY: testKey,
+    APP_URL: "https://rotina-self.vercel.app",
+    NODE_ENV: "production",
+  });
+  assert.equal(prodWithAppUrl.isAvailable, true);
+  assert.equal(prodWithAppUrl.appUrl, "https://rotina-self.vercel.app");
+
+  // 4. Em produção com VERCEL_PROJECT_PRODUCTION_URL: disponível
+  const prodWithVercelUrl = getCalendarConfig({
+    GOOGLE_CLIENT_ID: "client-id",
+    GOOGLE_CLIENT_SECRET: "client-secret",
+    CALENDAR_TOKEN_KEY: testKey,
+    VERCEL_PROJECT_PRODUCTION_URL: "rotina-self.vercel.app",
+    NODE_ENV: "production",
+  });
+  assert.equal(prodWithVercelUrl.isAvailable, true);
+  assert.equal(prodWithVercelUrl.appUrl, "https://rotina-self.vercel.app");
+
+  // 5. getRedirectUri usa a appUrl da configuração
+  const redirectUri = getRedirectUri(undefined, {
+    GOOGLE_CLIENT_ID: "client-id",
+    GOOGLE_CLIENT_SECRET: "client-secret",
+    CALENDAR_TOKEN_KEY: testKey,
+    APP_URL: "https://rotina-self.vercel.app",
+  });
+  assert.equal(redirectUri, "https://rotina-self.vercel.app/api/calendar/callback");
+});
+
 test("OAuth 2.0 PKCE e construção de URL Google", () => {
   const verifier = generateCodeVerifier();
   assert.ok(verifier.length >= 43, "code_verifier deve ter pelo menos 43 caracteres");
 
   const challenge = generateCodeChallenge(verifier);
   assert.ok(challenge.length > 0, "code_challenge deve ser gerado");
-  // Determinístico
   assert.equal(challenge, generateCodeChallenge(verifier));
 
   const state = generateOAuthState();
@@ -125,75 +226,211 @@ test("OAuth 2.0 PKCE e construção de URL Google", () => {
   assert.ok(url.includes("select_account"));
 });
 
-test("Decodificação de ID Token JWT extrai sub e email com segurança", () => {
-  const header = Buffer.from(JSON.stringify({ alg: "RS256" })).toString("base64url");
-  const payload = Buffer.from(
-    JSON.stringify({
-      sub: "google-sub-123456",
-      email: "Pessoa.Estudos@Example.Test",
-      email_verified: true,
-    }),
-  ).toString("base64url");
-  const fakeJwt = `${header}.${payload}.fakeSignature`;
+test("Troca de código OAuth valida dados via endpoint userinfo oficial e exige email_verified (M3)", async () => {
+  // 1. Sucesso: token retornado e userinfo com email verificado
+  const mockFetchSuccess = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const urlStr = String(input);
 
-  const profile = decodeIdToken(fakeJwt);
-  assert.equal(profile.sub, "google-sub-123456");
-  assert.equal(profile.email, "pessoa.estudos@example.test");
+    if (urlStr.includes("oauth2.googleapis.com/token")) {
+      return new Response(
+        JSON.stringify({
+          access_token: "mock-valid-access-token",
+          refresh_token: "mock-refresh-token",
+          expires_in: 3600,
+        }),
+        { status: 200 },
+      );
+    }
 
-  assert.throws(() => decodeIdToken("invalido"), GoogleOAuthError);
+    if (urlStr.includes("openidconnect.googleapis.com/v1/userinfo")) {
+      const authHeader = (init?.headers as Record<string, string>)?.Authorization;
+      assert.equal(authHeader, "Bearer mock-valid-access-token");
+      return new Response(
+        JSON.stringify({
+          sub: "google-sub-valid-987",
+          email: "Usuario.Verificado@Example.Test",
+          email_verified: true,
+        }),
+        { status: 200 },
+      );
+    }
+
+    return new Response("Not found", { status: 404 });
+  };
+
+  const { tokens, profile } = await exchangeCodeForTokens({
+    code: "fake-code",
+    codeVerifier: "fake-verifier",
+    redirectUri: "http://localhost:3000/api/calendar/callback",
+    clientId: "test-id",
+    clientSecret: "test-sec",
+    fetchFn: mockFetchSuccess as typeof fetch,
+  });
+
+  assert.equal(tokens.accessToken, "mock-valid-access-token");
+  assert.equal(tokens.refreshToken, "mock-refresh-token");
+  assert.equal(profile.sub, "google-sub-valid-987");
+  assert.equal(profile.email, "usuario.verificado@example.test");
+
+  // 2. Rejeição quando email_verified é falso
+  const mockFetchUnverified = async (input: RequestInfo | URL) => {
+    const urlStr = String(input);
+    if (urlStr.includes("oauth2.googleapis.com/token")) {
+      return new Response(
+        JSON.stringify({
+          access_token: "mock-unverified-access-token",
+          refresh_token: "mock-refresh-token",
+          expires_in: 3600,
+        }),
+        { status: 200 },
+      );
+    }
+    if (urlStr.includes("openidconnect.googleapis.com/v1/userinfo")) {
+      return new Response(
+        JSON.stringify({
+          sub: "google-sub-unverified",
+          email: "unverified@example.test",
+          email_verified: false,
+        }),
+        { status: 200 },
+      );
+    }
+    return new Response("Not found", { status: 404 });
+  };
+
+  await assert.rejects(
+    () =>
+      exchangeCodeForTokens({
+        code: "fake-code",
+        codeVerifier: "fake-verifier",
+        redirectUri: "http://localhost:3000/api/calendar/callback",
+        clientId: "test-id",
+        clientSecret: "test-sec",
+        fetchFn: mockFetchUnverified as typeof fetch,
+      }),
+    (err: unknown) => {
+      assert.ok(err instanceof GoogleOAuthError);
+      assert.match(err.message, /não está verificado/);
+      return true;
+    },
+  );
 });
 
-test("Troca de código OAuth lida com erros de token e ausência de refresh_token", async () => {
-  // Simula resposta de erro do Google
-  const mockFetchError = async () =>
-    new Response(JSON.stringify({ error: "invalid_grant" }), { status: 400 });
+test("Revogação de token Google via corpo POST urlencoded com timeout (B3, I2)", async () => {
+  let capturedBody = "";
+  let capturedContentType = "";
+  let capturedUrl = "";
 
-  await assert.rejects(
-    () =>
-      exchangeCodeForTokens({
-        code: "fake-code",
-        codeVerifier: "fake-verifier",
-        redirectUri: "http://localhost:3000/api/calendar/callback",
-        clientId: "test-id",
-        clientSecret: "test-sec",
-        fetchFn: mockFetchError as typeof fetch,
-      }),
-    (err: unknown) => {
-      assert.ok(err instanceof GoogleOAuthError);
-      assert.match(err.message, /Não foi possível conectar com o Google/);
-      return true;
-    },
-  );
+  const mockRevokeFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    capturedUrl = String(input);
+    capturedBody = String(init?.body ?? "");
+    capturedContentType = String((init?.headers as Record<string, string>)?.["Content-Type"] ?? "");
+    assert.ok(init?.signal, "Deve fornecer AbortSignal para timeout de segurança");
+    return new Response("", { status: 200 });
+  };
 
-  // Simula resposta sem refresh_token
-  const mockFetchNoRefresh = async () =>
-    new Response(
-      JSON.stringify({
-        access_token: "fake-access-token",
-        id_token: `${Buffer.from("{}").toString("base64url")}.${Buffer.from(
-          JSON.stringify({ sub: "sub1", email: "a@b.com" }),
-        ).toString("base64url")}.sig`,
-        expires_in: 3600,
-      }),
-      { status: 200 },
+  await revokeGoogleToken({
+    token: "refresh-token-para-revogar-123",
+    fetchFn: mockRevokeFetch as typeof fetch,
+  });
+
+  assert.equal(capturedUrl, "https://oauth2.googleapis.com/revoke");
+  assert.equal(capturedContentType, "application/x-www-form-urlencoded");
+  assert.equal(capturedBody, "token=refresh-token-para-revogar-123");
+});
+
+test("Limite máximo de 5 contas vinculadas por usuário (B5)", async () => {
+  const testKey = randomBytes(32).toString("base64");
+  process.env.CALENDAR_TOKEN_KEY = testKey;
+  process.env.GOOGLE_CLIENT_ID = "test-client.google.com";
+  process.env.GOOGLE_CLIENT_SECRET = "test-secret";
+
+  const userLim = {
+    id: `user-limite-${randomBytes(6).toString("hex")}`,
+    email: "limite@example.test",
+    name: "Usuário Limite",
+  };
+
+  await withDatabase(async (db) => {
+    // Insere 5 contas diferentes com sucesso
+    for (let i = 1; i <= 5; i++) {
+      const sub = `sub-google-${i}`;
+      const tokenEnc = encryptToken(`token-${i}`, testKey, `${userLim.id}:${sub}`);
+      await saveCalendarAccount(db, userLim, {
+        googleSub: sub,
+        email: `conta${i}@exemplo.test`,
+        refreshTokenEnc: tokenEnc,
+      });
+    }
+
+    const contas = await listCalendarAccounts(db, userLim);
+    assert.equal(contas.length, 5);
+
+    // Tentativa de adicionar a 6ª conta (com sub novo) é bloqueada com mensagem em pt-BR
+    const sub6 = "sub-google-6";
+    const token6 = encryptToken("token-6", testKey, `${userLim.id}:${sub6}`);
+    await assert.rejects(
+      () =>
+        saveCalendarAccount(db, userLim, {
+          googleSub: sub6,
+          email: "conta6@exemplo.test",
+          refreshTokenEnc: token6,
+        }),
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        assert.match(err.message, /Limite máximo de 5 contas Google atingido/);
+        return true;
+      },
     );
 
-  await assert.rejects(
-    () =>
-      exchangeCodeForTokens({
-        code: "fake-code",
-        codeVerifier: "fake-verifier",
-        redirectUri: "http://localhost:3000/api/calendar/callback",
-        clientId: "test-id",
-        clientSecret: "test-sec",
-        fetchFn: mockFetchNoRefresh as typeof fetch,
-      }),
-    (err: unknown) => {
-      assert.ok(err instanceof GoogleOAuthError);
-      assert.match(err.message, /permissão de atualização offline/);
-      return true;
-    },
-  );
+    // Reconectar uma das 5 contas já existentes (mesmo googleSub) deve ser permitido para atualização de token
+    const token1Novo = encryptToken("token-1-renovado", testKey, `${userLim.id}:sub-google-1`);
+    await saveCalendarAccount(db, userLim, {
+      googleSub: "sub-google-1",
+      email: "conta1-novoemail@exemplo.test",
+      refreshTokenEnc: token1Novo,
+    });
+
+    const contasAposUpdate = await listCalendarAccounts(db, userLim);
+    assert.equal(contasAposUpdate.length, 5);
+    const conta1 = contasAposUpdate.find((c) => c.googleSub === "sub-google-1");
+    assert.equal(conta1?.email, "conta1-novoemail@exemplo.test");
+  });
+});
+
+test("Sanitização de links de eventos htmlLink (I4)", () => {
+  assert.equal(isValidCalendarHtmlLink("https://www.google.com/calendar/event?eid=123"), true);
+  assert.equal(isValidCalendarHtmlLink("https://calendar.google.com/calendar/r/eventedit/123"), true);
+
+  // Rejeições de segurança
+  assert.equal(isValidCalendarHtmlLink("javascript:alert(document.cookie)"), false);
+  assert.equal(isValidCalendarHtmlLink("data:text/html,<script>alert(1)</script>"), false);
+  assert.equal(isValidCalendarHtmlLink("https://evil.com/phishing"), false);
+  assert.equal(isValidCalendarHtmlLink("http://www.google.com/insecure"), false);
+  assert.equal(isValidCalendarHtmlLink(""), false);
+  assert.equal(isValidCalendarHtmlLink(undefined), false);
+});
+
+test("Mensagens de erro e sucesso da UI mapeadas para códigos fixos (I5)", () => {
+  assert.ok(CALENDAR_ERROR_MESSAGES.access_denied);
+  assert.ok(CALENDAR_ERROR_MESSAGES.missing_params);
+  assert.ok(CALENDAR_ERROR_MESSAGES.invalid_session);
+  assert.ok(CALENDAR_ERROR_MESSAGES.invalid_state);
+  assert.ok(CALENDAR_ERROR_MESSAGES.user_mismatch);
+  assert.ok(CALENDAR_ERROR_MESSAGES.unconfigured);
+  assert.ok(CALENDAR_ERROR_MESSAGES.no_offline_access);
+  assert.ok(CALENDAR_ERROR_MESSAGES.email_unverified);
+  assert.ok(CALENDAR_ERROR_MESSAGES.account_limit);
+  assert.ok(CALENDAR_ERROR_MESSAGES.auth_failed);
+  assert.ok(CALENDAR_ERROR_MESSAGES.remove_failed);
+  assert.ok(CALENDAR_ERROR_MESSAGES.invalid_account);
+
+  assert.ok(CALENDAR_SUCCESS_MESSAGES.connected);
+  assert.ok(CALENDAR_SUCCESS_MESSAGES.removed);
+
+  // Mensagens arbitrárias externas não existem no dicionário
+  assert.equal(CALENDAR_ERROR_MESSAGES["<script>alert(1)</script>"], undefined);
+  assert.equal(CALENDAR_ERROR_MESSAGES["qualquer texto arbitrario"], undefined);
 });
 
 test("Isolamento entre usuários: Usuário A não lista nem remove contas de B", async () => {
@@ -207,16 +444,16 @@ test("Isolamento entre usuários: Usuário A não lista nem remove contas de B",
     assert.deepEqual(await listCalendarAccounts(db, USER_A), []);
     assert.deepEqual(await listCalendarAccounts(db, USER_B), []);
 
-    // 2. Salva conta para A
-    const tokenA = encryptToken("token-a", testKey);
+    // 2. Salva conta para A com AAD vinculado
+    const tokenA = encryptToken("token-a", testKey, `${USER_A.id}:sub-google-a`);
     await saveCalendarAccount(db, USER_A, {
       googleSub: "sub-google-a",
       email: "conta-a@gmail.test",
       refreshTokenEnc: tokenA,
     });
 
-    // 3. Salva conta para B
-    const tokenB = encryptToken("token-b", testKey);
+    // 3. Salva conta para B com AAD vinculado
+    const tokenB = encryptToken("token-b", testKey, `${USER_B.id}:sub-google-b`);
     await saveCalendarAccount(db, USER_B, {
       googleSub: "sub-google-b",
       email: "conta-b@gmail.test",
@@ -262,25 +499,22 @@ test("Falha invalid_grant em uma conta é isolada e não derruba outras contas c
   };
 
   await withDatabase(async (db) => {
-    // Conecta duas contas para o mesmo usuário
+    // Conecta duas contas para o mesmo usuário com AAD
     await saveCalendarAccount(db, userResiliente, {
       googleSub: "sub-conta-1-revogada",
       email: "expirada@trabalho.test",
-      refreshTokenEnc: encryptToken("token-revogado", testKey),
+      refreshTokenEnc: encryptToken("token-revogado", testKey, `${userResiliente.id}:sub-conta-1-revogada`),
     });
 
     await saveCalendarAccount(db, userResiliente, {
       googleSub: "sub-conta-2-valida",
       email: "ativa@estudos.test",
-      refreshTokenEnc: encryptToken("token-valido", testKey),
+      refreshTokenEnc: encryptToken("token-valido", testKey, `${userResiliente.id}:sub-conta-2-valida`),
     });
 
     const contas = await listCalendarAccounts(db, userResiliente);
     assert.equal(contas.length, 2);
 
-    // Mock do fetch:
-    // - Para a conta 1 (token-revogado): retorna 400 invalid_grant na renovação de token
-    // - Para a conta 2 (token-valido): retorna 200 com access_token, e na busca de eventos retorna lista com 1 evento
     const mockFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       const urlStr = String(input);
 
