@@ -8,6 +8,7 @@ import {
 export const routines = sqliteTable("routines", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
+  // 127 = ALL_WEEKDAYS (rules.ts): todos os dias da semana.
   weekdays: integer("weekdays").notNull().default(127),
   archivedAt: integer("archived_at"),
   createdAt: integer("created_at").notNull(),

@@ -38,11 +38,11 @@ test("rotina persiste, pontua uma vez por dia e renova atividades sem perder pon
     assert.deepEqual(results.toSorted(), [false, true]);
     assert.equal(
       completionMessage(results.find((completed) => !completed)!),
-      "Ja concluida hoje",
+      "Já concluída hoje",
     );
     const replay = await completeActivity(connection.db, activity.id, today);
     assert.equal(replay, false);
-    assert.equal(completionMessage(replay), "Ja concluida hoje");
+    assert.equal(completionMessage(replay), "Já concluída hoje");
     assert.doesNotMatch(completionMessage(replay), /Conclusão registrada/);
     assert.match(completionMessage(true), /^Conclusão registrada/);
     const state = await dashboard(connection.db, today);

@@ -61,7 +61,7 @@ export function weekdaySP(date: Date): number {
 export function completionMessage(completed: boolean): string {
   return completed
     ? "Conclusão registrada. Cada atividade vale pontos uma vez por dia."
-    : "Ja concluida hoje";
+    : "Já concluída hoje";
 }
 
 export function validName(value: unknown): string {

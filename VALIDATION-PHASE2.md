@@ -10,8 +10,8 @@
 
 ## Testes e build
 
-- `npm test`: **17 testes aprovados, 0 falhas**. Inclui 9 novos testes da Fase 2 e os testes existentes de regras, persistência, concorrência e segurança de DATABASE_URL.
-- Novos testes: validação dos dias, horários, virada semanal em São Paulo, filtro diário e ordenação, edição preservando histórico, arquivamento preservando linhas/pontos e bloqueando mutações, entradas inválidas, migração incremental a partir do schema da Fase 1 e bloqueio do script de migration em produção/URL remota.
+- `npm test`: **19 testes aprovados, 0 falhas**. Inclui os testes da Fase 2, os testes existentes de regras, persistência e segurança de DATABASE_URL, concorrência de conclusão com uma única gravação e virada 02:59Z/03:00Z em `completeActivity`.
+- Novos testes: validação dos dias, horários, virada semanal em São Paulo, concorrência de conclusão com uma única gravação, virada 02:59Z/03:00Z por `completeActivity`, filtro diário e ordenação, edição preservando histórico, arquivamento preservando linhas/pontos e bloqueando mutações, entradas inválidas, migração incremental a partir do schema da Fase 1 e bloqueio do script de migration em produção/URL remota.
 - `npm run build`: aprovado, com dois avisos de tracing dinâmico em `src/db/client.ts`, introduzidos pelos commits de segurança integrados durante esta tarefa. O tracing pode ampliar arquivos incluídos em um pacote de implantação. Não houve implantação; o código de segurança de outro agente foi preservado.
 - `npm run typecheck`: aprovado.
 - `git diff --check`: aprovado antes do commit.
@@ -21,6 +21,17 @@
 Migration Drizzle gerada: `drizzle/0001_sudden_trauma.sql`. Adiciona `weekdays` (padrão 127: todos os dias) e `archived_at` nas rotinas, `scheduled_time` e `archived_at` nas atividades. Não remove dados ou tabelas.
 
 Aplicada somente aos arquivos SQLite locais em `data/`, incluindo o banco de QA isolado. Uma cópia do SQLite local foi preservada em `data/rotina-before-phase2-*.db` antes da migration. Os bancos e a cópia estão ignorados pelo Git. Nenhuma migration em produção. O teste incremental verifica preservação dos dados legados e repetição idempotente do migrator.
+
+## Rollback
+
+Para restaurar o SQLite anterior à Fase 2 (PowerShell, na raiz do projeto):
+
+1. Encerre o servidor e qualquer script que esteja com o banco aberto.
+2. Liste a cópia preservada: `Get-ChildItem -LiteralPath data -Filter 'rotina-before-phase2-*.db'`.
+3. Opcional, guarde o estado atual: `Copy-Item -LiteralPath 'data\rotina.db' -Destination 'data\rotina-after-phase2.db'`.
+4. Restaure o backup escolhido: `Copy-Item -LiteralPath 'data\rotina-before-phase2-<timestamp>.db' -Destination 'data\rotina.db' -Force`. Se o app usar `DATABASE_URL` customizado, substitua também o arquivo apontado por essa variável; para o banco de QA, use `data\qa-phase2.db` como destino.
+5. Volte o código ao commit anterior à Fase 2 (ou aplique `git revert` do commit da Fase 2). Não rode `npm run db:migrate` depois do restore: a migration `0001_sudden_trauma.sql` reaplicaria `weekdays`, `archived_at` e `scheduled_time`.
+6. Reabra o app e confirme rotinas, atividades e pontos. Mantenha `data/rotina-before-phase2-*.db` intacto como evidência.
 
 ## Navegador e documentação visual
 

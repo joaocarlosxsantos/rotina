@@ -108,6 +108,80 @@ test("dia de SP: virada de semana ignora o fuso do host e o dia UTC", () => {
   assert.equal(dayKey(new Date("2026-11-22T02:59:59Z")), "2026-11-21");
 });
 
+test("conclusão concorrente na Fase 2 grava apenas uma conclusão e 10 pontos", async () => {
+  await withDatabase(async (db) => {
+    const routine = await addRoutine(db, "Terça concorrente", [2]);
+    const activity = await addActivity(db, routine.id, "Caminhar", "07:00");
+    const results = await Promise.all(
+      Array.from({ length: 4 }, () =>
+        completeActivity(db, activity.id, tuesday),
+      ),
+    );
+    assert.deepEqual(results.toSorted(), [false, false, false, true]);
+    const rows = await db.select().from(completions);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].activityId, activity.id);
+    assert.equal(rows[0].day, "2026-11-17");
+    assert.equal(rows[0].points, 10);
+    const state = await dashboard(db, tuesday);
+    assert.equal(state.done, 1);
+    assert.equal(state.points, 10);
+    assert.equal(state.mood, "feliz");
+  });
+});
+
+test("virada 02:59Z/03:00Z em completeActivity troca o dia elegível e o dia gravado em SP", async () => {
+  await withDatabase(async (db) => {
+    const saturday = await addRoutine(db, "Sábado", [6]);
+    const saturdayActivity = await addActivity(
+      db,
+      saturday.id,
+      "Caminhar no sábado",
+    );
+    const sunday = await addRoutine(db, "Domingo", [0]);
+    const sundayActivity = await addActivity(
+      db,
+      sunday.id,
+      "Caminhar no domingo",
+    );
+    const before = new Date("2026-11-22T02:59:59Z");
+    const after = new Date("2026-11-22T03:00:00Z");
+    assert.equal(
+      await completeActivity(db, saturdayActivity.id, before),
+      true,
+    );
+    assert.equal(
+      await completeActivity(db, saturdayActivity.id, before),
+      false,
+    );
+    await assert.rejects(
+      () => completeActivity(db, saturdayActivity.id, after),
+      InputError,
+    );
+    assert.equal(
+      await completeActivity(db, sundayActivity.id, after),
+      true,
+    );
+    await assert.rejects(
+      () => completeActivity(db, sundayActivity.id, before),
+      InputError,
+    );
+    const rows = await db.select().from(completions);
+    assert.equal(rows.length, 2);
+    assert.equal(
+      rows.find((row) => row.activityId === saturdayActivity.id)?.day,
+      "2026-11-21",
+    );
+    assert.equal(
+      rows.find((row) => row.activityId === sundayActivity.id)?.day,
+      "2026-11-22",
+    );
+    assert.equal((await dashboard(db, before)).points, 20);
+    assert.equal((await dashboard(db, after)).total, 1);
+    assert.equal((await dashboard(db, after)).done, 1);
+  });
+});
+
 test("agenda diária filtra rotina, herda dias nas atividades e ordena horário sem bloquear conclusão antecipada", async () => {
   await withDatabase(async (db) => {
     const today = await addRoutine(db, "Terça de cuidado", [2]);
