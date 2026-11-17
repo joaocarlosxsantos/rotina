@@ -93,7 +93,8 @@ test("Pet expõe role e texto alternativo do humor", () => {
     assert.ok(markup.includes('role="img"'));
     assert.ok(markup.includes(`aria-label="${label}"`));
     assert.ok(!markup.includes("aria-hidden"));
-    assert.ok(!markup.includes("<path"));
+    assert.ok(markup.includes("<path"));
+    assert.ok(!markup.includes("<rect"));
   }
 });
 
@@ -138,13 +139,14 @@ test("Humor inválido não cai silenciosamente em ok", () => {
   );
 });
 
-test("Sprites isolados permanecem decorativos", () => {
+test("Sprites isolados recebem nome acessivel por padrao", () => {
   const markup = renderToStaticMarkup(React.createElement(PetHappy));
 
-  assert.ok(markup.includes('aria-hidden="true"'));
-  assert.ok(!markup.includes('role="img"'));
+  assert.ok(!markup.includes("aria-hidden"));
+  assert.ok(markup.includes("<title>"));
+  assert.ok(markup.includes('role="img"'));
   assert.ok(markup.includes('width="180"'));
-  assert.ok(markup.includes('shape-rendering="crispEdges"'));
+  assert.ok(!markup.includes("crispEdges"));
 });
 
 test("normalizeSize trata vazio, zero, negativo, NaN e fracionário", () => {

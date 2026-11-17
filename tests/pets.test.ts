@@ -9,9 +9,8 @@ import {
   DEFAULT_PET_KIND,
   isPetKind,
   parsePetKind,
-  type PetKind,
 } from "../src/lib/pets";
-import { PetSprite, SPRITES, horizontalRuns } from "../src/app/pet-sprites";
+import { PetSprite, SPRITES, normalizeSize } from "../src/app/pet-sprites";
 import { Pet } from "../src/app/pet";
 import { Header } from "../src/app/header";
 import { getUserPet, setUserPet, dashboard } from "../src/lib/store";
@@ -26,83 +25,62 @@ const OTHER_USER = {
   name: "Usuário B",
 };
 
-test("contact sheet contém os 18 sprites nos dois tamanhos e dois fundos, sem rede ou scripts", () => {
+test("Contact sheet has all 36 vector sprites in two sizes and backgrounds", () => {
   const preview = readFileSync("docs/pets-preview.html", "utf8");
-  assert.equal((preview.match(/role="img"/g) ?? []).length, 72);
-  assert.equal((preview.match(/width="64"/g) ?? []).length, 36);
-  assert.equal((preview.match(/width="128"/g) ?? []).length, 36);
-  assert.equal((preview.match(/class="board light"/g) ?? []).length, 6);
-  assert.equal((preview.match(/class="board dark"/g) ?? []).length, 6);
-  assert.doesNotMatch(preview, /<script|https?:\/\//);
-  assert.ok(preview.includes('id="animate"'));
+  assert.equal((preview.match(/role="img"/g) ?? []).length, 144);
+  for (const size of [64, 128]) assert.equal((preview.match(new RegExp('width="' + size + '"', "g")) ?? []).length, 72);
+  for (const theme of ["light", "dark"]) assert.equal((preview.match(new RegExp('class="board ' + theme + '"', "g")) ?? []).length, 12);
+  assert.doesNotMatch(preview, /<script|https?:\/\/|pixelated|crispEdges/);
   assert.ok(preview.includes("prefers-reduced-motion: reduce"));
-  for (const kind of PET_KINDS) for (const mood of ["sad", "ok", "happy"] as const) {
-    assert.ok(preview.includes(renderToStaticMarkup(React.createElement(PetSprite, { kind, mood, size: 64, label: `${PET_CATALOG[kind].name} ${{ sad: "triste", ok: "de boa", happy: "feliz" }[mood]}` }))));
+  for (const kind of PET_KINDS) for (const mood of ["sad", "ok", "happy"]) {
+    assert.ok(preview.includes('data-pet-kind="' + kind + '" data-pet-mood="' + mood + '"'));
   }
 });
 
-test("Catálogo de pets contém 6 companheiros e cada um possui 3 humores com SVG 32x32 válido", () => {
-  assert.equal(PET_KINDS.length, 6, "Devem existir exatamente 6 companheiros no catálogo");
-  assert.deepEqual(
-    PET_KINDS,
-    ["original", "gato", "cachorro", "coelho", "dragao", "planta"],
-  );
-
-  const moods = ["sad", "ok", "happy"] as const;
-
+test("All 12 kinds have distinct vector illustrations for all 3 moods", () => {
+  assert.deepEqual(PET_KINDS, ["original", "gato", "cachorro", "coelho", "dragao", "planta", "hamster", "raposa", "panda", "pinguim", "pintinho", "coruja"]);
+  const silhouettes = new Set<string>();
   for (const kind of PET_KINDS) {
-    const def = PET_CATALOG[kind];
-    assert.ok(def, `Companheiro ${kind} deve ter definição`);
-    assert.equal(def.id, kind);
-    assert.equal(def.name, ["Ursinho", "Gatinho", "Cachorrinho", "Coelhinho", "Dragãozinho", "Brotinho"][PET_KINDS.indexOf(kind)]);
-    assert.ok(def.name.length > 0, `Companheiro ${kind} deve ter nome pt-BR`);
-    assert.ok(def.description.length > 0, `Companheiro ${kind} deve ter descrição`);
-
-    const spriteDef = SPRITES[kind];
-    assert.ok(spriteDef, `Companheiro ${kind} deve ter SPRITES definido`);
-    assert.deepEqual(Object.keys(spriteDef.rows), ["sad", "ok", "happy"]);
-    for (const palette of [spriteDef.colors, spriteDef.sadColors]) {
-      assert.ok(Object.keys(palette).length >= 6 && Object.keys(palette).length <= 10);
-      assert.ok(Object.values(palette).every(color => /^#[0-9a-f]{6}$/i.test(color) && color !== "#000000"));
+    assert.equal(PET_CATALOG[kind].id, kind);
+    assert.ok(PET_CATALOG[kind].description.length > 0);
+    assert.ok(SPRITES[kind]);
+    const variants = new Set<string>();
+    for (const mood of ["sad", "ok", "happy"] as const) {
+      const label = PET_CATALOG[kind].name + " " + mood;
+      const html = renderToStaticMarkup(React.createElement(PetSprite, { kind, mood, size: 64, className: "sample", label }));
+      assert.ok(html.startsWith("<svg"));
+      assert.ok(html.includes('viewBox="0 0 200 200"'));
+      assert.ok(html.includes('width="64" height="64"'));
+      assert.ok(html.includes('class="sample"'));
+      assert.ok(html.includes('role="img"'));
+      assert.ok(html.includes('aria-label="' + label + '"'));
+      assert.ok(html.includes("<title>" + label + "</title>"));
+      assert.ok(html.includes("<linearGradient"));
+      assert.ok(html.includes('class="pet-eyes"'));
+      assert.doesNotMatch(html, /<rect|crispEdges|pixelated/);
+      variants.add(html.replace(/data-pet-mood="[^"]*"/, ""));
+      if (mood === "ok") silhouettes.add(html.replace(/data-pet-kind="[^"]*"|aria-label="[^"]*"|<title>.*?<\/title>/g, ""));
     }
-    assert.notDeepEqual(spriteDef.colors, spriteDef.sadColors);
-    assert.equal(new Set(moods.map(mood => spriteDef.rows[mood].join("\n"))).size, 3);
-    for (const mood of moods) {
-      const rows = spriteDef.rows[mood];
-      assert.equal(rows.length, 32);
-      assert.ok(rows.every(row => row.length === 32));
-      assert.ok([...rows.join("")].every(cell => cell === "." || cell in spriteDef.colors));
-      assert.ok(rows.some(row => row.includes("o")), "Contorno presente");
-      assert.ok(rows.some(row => row.includes("e")), "Olhos presentes");
-      assert.ok(rows.some(row => row.includes("h")), "Brilho dos olhos presente");
-      if (mood === "sad") assert.ok(rows.some(row => row.includes("t")), "Lágrimas presentes");
-      const runs = horizontalRuns(rows);
-      const pixels = rows.join("").replaceAll(".", "").length;
-      assert.ok(runs.length < pixels, "Corridas devem reduzir os rects");
-      assert.equal(runs.reduce((sum, run) => sum + run.width, 0), pixels);
-      const reconstructed = Array.from({ length: 32 }, () => Array<string>(32).fill("."));
-      for (const run of runs) {
-        assert.ok(run.width > 0 && run.x + run.width <= 32);
-        for (let x = run.x; x < run.x + run.width; x++) reconstructed[run.y][x] = run.key;
-        assert.notEqual(rows[run.y][run.x + run.width], run.key, "Corrida deve ser máxima");
-      }
-      assert.deepEqual(reconstructed.map(row => row.join("")), rows, "Compressão deve preservar cada pixel");
-      const html = renderToStaticMarkup(
-        React.createElement(PetSprite, {
-          kind,
-          mood,
-          size: 64,
-          label: `${def.name} ${mood}`,
-        }),
-      );
-
-      assert.ok(html.startsWith("<svg"), `Deve gerar elemento <svg> para ${kind} ${mood}`);
-      assert.ok(html.includes('viewBox="0 0 32 32"'), "Deve manter viewBox 32x32");
-      assert.ok(html.includes('shape-rendering="crispEdges"'), "Deve preservar crispEdges");
-      assert.ok(html.includes('role="img"'), "Deve ter role img");
-      assert.ok(html.includes(`aria-label="${def.name} ${mood}"`), "Deve ter aria-label acessível");
-    }
+    assert.equal(variants.size, 3);
+    const defaultLabel = renderToStaticMarkup(React.createElement(PetSprite, {kind, mood: "ok"}));
+    assert.ok(defaultLabel.includes('role="img"'));
+    assert.ok(defaultLabel.includes(PET_CATALOG[kind].name));
   }
+  assert.equal(silhouettes.size, 12);
+});
+
+test("Vector gradient ids do not collide when the same pet repeats", () => {
+  const html = renderToStaticMarkup(React.createElement("div", null, ...[1,2,3].map(key => React.createElement(PetSprite, { key, kind: "panda", mood: "ok" }))));
+  const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(match => match[1]);
+  assert.equal(ids.length, 6);
+  assert.equal(new Set(ids).size, ids.length);
+  for (const [, ref] of html.matchAll(/url\(#([^)]*)\)/g)) assert.ok(ids.includes(ref));
+});
+
+test("Sprite dimensions normalize invalid input", () => {
+  for (const size of [undefined, NaN, Infinity, -1, 0]) assert.equal(normalizeSize(size), 180);
+  assert.equal(normalizeSize(0.2), 1);
+  assert.equal(normalizeSize(63.7), 64);
 });
 
 test("Pet renderiza com o companheiro escolhido preservando o humor", () => {
@@ -133,7 +111,7 @@ test("Validação de pet_kind aceita catálogo e rejeita valores inválidos", ()
     assert.equal(parsePetKind(valid), valid);
   }
 
-  const invalids = ["alien", "urso", "peixe", "", "   ", null, undefined, 42, {}];
+  const invalids = ["alien", "urso", "peixe", "", "   ", null, undefined, 42, {}, "__proto__", "constructor", "GATO", "gato ", "<script>", "panda' OR 1=1"];
   for (const invalid of invalids) {
     assert.equal(isPetKind(invalid), false);
     assert.equal(parsePetKind(invalid), DEFAULT_PET_KIND);
@@ -185,6 +163,20 @@ test("Persistência e isolamento entre usuários para seleção do pet", async (
 
     const dashB = await dashboard(db, OTHER_USER, new Date());
     assert.equal(dashB.petKind, "dragao");
+  });
+});
+
+test("Every new animal persists through the strict server allowlist", async () => {
+  await withDatabase(async db => {
+    for (const kind of PET_KINDS.slice(6)) {
+      assert.equal(parsePetKind(kind), kind);
+      assert.equal(await setUserPet(db, TEST_USER, kind), kind);
+      assert.equal(await getUserPet(db, TEST_USER), kind);
+    }
+    for (const invalid of ["__proto__", "constructor", "PANDA", "panda ", "panda' OR 1=1", null, {}]) {
+      await assert.rejects(() => setUserPet(db, TEST_USER, invalid), InputError);
+    }
+    assert.equal(await getUserPet(db, TEST_USER), "coruja");
   });
 });
 

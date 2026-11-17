@@ -13,7 +13,7 @@ if (!motion) throw new Error("CSS dos pets não encontrado.");
 
 const page = renderToStaticMarkup(<html lang="pt-BR"><head>
   <meta charSet="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Companheiros — Rotina Pet · 32×32</title>
+  <title>Companheiros — Rotina Pet · SVG vetorial</title>
   <style>{`
     *{box-sizing:border-box}body{margin:0;background:#f8f7f2;color:#203e32;font:16px/1.5 Georgia,serif;padding:32px}
     h1{font-size:2.5rem;line-height:1.1;margin:0 0 12px}h2{margin:0 0 4px}p{max-width:70ch}label,figcaption,small{font-family:Arial,sans-serif}
@@ -22,7 +22,7 @@ const page = renderToStaticMarkup(<html lang="pt-BR"><head>
     .boards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.board{padding:20px;border:1px solid #c5cbbf;border-radius:14px}
     .light{background:#fffefb}.dark{background:#141c17;color:#eef3ea;border-color:#385348}.moods{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
     figure{display:flex;flex-direction:column;align-items:center;justify-content:end;gap:12px;margin:24px 0 0;min-width:0}figcaption{font-size:14px}
-    .pair{display:flex;align-items:end;justify-content:center;gap:12px;flex-wrap:wrap}svg{flex-shrink:0;image-rendering:pixelated}
+    .pair{display:flex;align-items:end;justify-content:center;gap:12px;flex-wrap:wrap}svg{flex-shrink:0;image-rendering:auto}
     .sizes{font:12px Arial,sans-serif;margin-bottom:8px}.sample{display:flex;flex-direction:column;align-items:center}
     #animate:not(:checked)~main *{animation:none!important}
     @media(prefers-reduced-motion:no-preference){#animate:checked~main .pet-body,#animate:checked~main .pet-eyes{animation-iteration-count:infinite}}
@@ -31,8 +31,8 @@ const page = renderToStaticMarkup(<html lang="pt-BR"><head>
     ${motion}
   `}</style>
 </head><body>
-  <h1>Seis jeitos de fazer companhia.</h1>
-  <p>Matrizes de 32×32 pixels, exibidas sem suavização em 64 e 128 px. Os três humores lado a lado, no papel claro e no fundo noturno da marca.</p>
+  <h1>Doze jeitos de fazer companhia.</h1>
+  <p>Ilustrações vetoriais suaves, exibidas em 64 e 128 px. Os três humores lado a lado, no papel claro e no fundo noturno da marca.</p>
   <input id="animate" type="checkbox" /><label htmlFor="animate">Animar prévias (desmarque para pausar)</label>
   <main>{PET_KINDS.map(kind => <article key={kind} id={kind}><h2>{PET_CATALOG[kind].name}</h2><p>{PET_CATALOG[kind].description}</p>
     <div className="boards">{["light", "dark"].map(theme => <section key={theme} className={`board ${theme}`} aria-label={`${PET_CATALOG[kind].name} em fundo ${theme === "light" ? "claro" : "escuro"}`}>
@@ -42,6 +42,6 @@ const page = renderToStaticMarkup(<html lang="pt-BR"><head>
 </body></html>);
 await mkdir(resolve("docs"), { recursive: true });
 await writeFile(resolve("docs/pets-preview.html"), `<!doctype html>\n${page}\n`, "utf8");
-console.log("Prévia gerada: docs/pets-preview.html (6 pets × 3 humores × 2 tamanhos × 2 fundos).");
+console.log("Prévia gerada: docs/pets-preview.html (12 pets × 3 humores × 2 tamanhos × 2 fundos).");
 }
 main().catch(() => { console.error("Não foi possível gerar a prévia dos pets."); process.exitCode = 1; });

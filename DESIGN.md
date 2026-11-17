@@ -1,6 +1,6 @@
 ---
 name: Rotina Pet
-description: Caderno de hábitos com um companheiro pixel.
+description: Caderno de hábitos com um companheiro vetorial.
 colors:
   paper: "#f8f7f2"
   ink: "#203e32"
@@ -155,17 +155,17 @@ components:
 
 ## Overview
 
-**Creative North Star: "Caderno de hábitos com companheiro pixel"**
+**Creative North Star: "Caderno de hábitos com companheiro vetorial"**
 
 Esta é uma descrição provisória extraída da interface implementada, não uma identidade de marca aprovada. O fundo papel, o texto verde escuro e os títulos serifados dão à tela o caráter de um caderno de uso diário. Listas separadas por linhas e formulários próximos das atividades mantêm a leitura direta.
 
-O pet pixel é o elemento ilustrado característico: sua expressão acompanha o estado do dia e vem acompanhada de texto. Os pets têm uma saudação breve que termina em 4,8s e respeita a preferência de movimento reduzido. Público específico, identidade de marca e linguagem visual de futuras telas continuam em aberto; esta documentação registra o código atual.
+O pet vetorial é o elemento ilustrado característico: sua expressão acompanha o estado do dia e vem acompanhada de texto. Os pets têm uma saudação breve que termina em 4,8s e respeita a preferência de movimento reduzido. Público específico, identidade de marca e linguagem visual de futuras telas continuam em aberto; esta documentação registra o código atual.
 
 **Key Characteristics:**
 - Papel claro e verde escuro, com superfícies verde suave.
 - Títulos serifados e controles sem serifa, usando fontes locais.
 - Rotinas em listas com divisórias e formulários no contexto.
-- Companheiro pixel original com três expressões e humor escrito.
+- Companheiro vetorial original com três expressões e humor escrito.
 - Estados de formulário legíveis, foco visível e movimento breve dos pets com alternativa estática.
 
 ## Colors
@@ -216,11 +216,11 @@ Os formulários destacados e o abrigo usam preenchimento (24px). Atividades têm
 
 ## Elevation & Depth
 
-Não há sombras, gradientes, filtros ou elevação animada na interface atual. A profundidade vem da diferença tonal entre papel e verde suave e das divisórias finas. O chão do pet é uma elipse preenchida, não uma sombra CSS.
+Os mascotes usam gradientes leves e sombra difusa; as superfícies da interface não usam elevação animada. A profundidade vem da diferença tonal entre papel e verde suave e das divisórias finas. O chão do pet é uma elipse com gradiente radial transparente.
 
 ## Shapes
 
-Superfícies destacadas usam cantos suaves (`surface`), controles e avisos usam cantos menores (`control`), e o selo de humor usa `mood`. Rotinas permanecem abertas sobre o papel, delimitadas por linhas de (1px). O ponto da assinatura é um quadrado (9px). O pet mantém geometria de pixels; seu chão tem contorno elíptico.
+Superfícies destacadas usam cantos suaves (`surface`), controles e avisos usam cantos menores (`control`), e o selo de humor usa `mood`. Rotinas permanecem abertas sobre o papel, delimitadas por linhas de (1px). O ponto da assinatura é um quadrado (9px). O pet usa curvas suaves com contorno fino, gradiente leve e sombra elíptica difusa.
 
 ## Components
 
@@ -252,17 +252,17 @@ A tela Hoje contém somente rotinas ativas da agenda do dia e atividades ativas;
 
 Os dias são um `fieldset` com `legend`, sete checkboxes nativos, texto de ajuda e foco visível. Todos vêm selecionados em novas rotinas; o servidor exige ao menos um. Horário usa `input type="time"` com passo de (60s), rótulo opcional e ajuda que explica o fuso e a possibilidade de concluir antes. Os formulários de edição reutilizam os mesmos campos da criação e mantêm rótulos e limites de nome.
 
-### Pixel companion and mood
+### Vector companion and mood
 
-O catálogo contém seis espécies e 18 matrizes (32 × 32): `original`/Ursinho, `gato`/Gatinho, `cachorro`/Cachorrinho, `coelho`/Coelhinho, `dragao`/Dragãozinho e `planta`/Brotinho, nessa ordem. IDs, nomes e ordem permanecem estáveis. A grade de 32 se aplica ao catálogo; marca, logomark e assets de 16 permanecem em 16.
+O catálogo tem 12 pets e 36 variantes: Ursinho (original), gato, cachorro, coelho, dragão, planta, hamster, raposa, panda, pinguim, pintinho e coruja. Os seis IDs originais permanecem estáveis. Marca e logomark conservam seus assets pixelados; o redesenho se restringe aos mascotes.
 
-Cada matriz usa transparência e uma legenda de nove cores: contorno, base, sombra, luz, detalhe, bochecha, olho, brilho do olho e lágrima. Base, sombra e luz fornecem três tons do corpo. Paletas próprias distinguem as espécies; a variante triste é mais fria, tem postura rebaixada e lágrimas. Olhos têm brilhos de 1–2 pixels, as bochechas são pontuais e a expressão feliz inclui sorriso e coração.
+Os SVGs usam curvas, gradientes leves e sombra suave, sem grades ou retângulos de pixels. Cabeças grandes, olhos com dois brilhos, bochechas rosadas e traços por espécie definem o estilo fofo. Triste tem sobrancelhas inclinadas, boca caída, lágrima e postura baixa; feliz tem sorriso aberto, sobrancelhas erguidas, coração e postura alta; ok sorri discretamente.
 
-O SVG gera `rect` por corridas horizontais contíguas da mesma cor, com `crispEdges` e `image-rendering: pixelated`, sem suavização. O tamanho padrão é (180 × 180px). Há nome acessível no SVG e humor escrito: “Feliz”, “De boa” ou “Triste”. O selo não é interativo.
+O viewBox é 200 × 200, o tamanho padrão é 180px e a renderização é suave. Cada instância gera IDs de gradiente exclusivos com useId. Todos os sprites têm role=img, aria-label e title, inclusive quando label não é informado. O humor continua escrito: Feliz, De boa ou Triste.
 
 O bloco `PET_MOTION_START`/`PET_MOTION_END` de `src/app/globals.css` anima o grupo do corpo: feliz sobe 3px em 2,4s por dois ciclos; ok sobe 2px em 2,4s por dois ciclos; triste desce 2px e escala a 0,98 em 4,8s por um ciclo. A piscada dura 4,8s por um ciclo; todos usam `ease-in-out`. A saudação do app termina em 4,8s. Com `prefers-reduced-motion: reduce`, animação e transformação são desativadas.
 
-`docs/pets-preview.html` reúne 72 amostras a 64/128px sobre fundos claro/escuro. A página é estática, sem CDN, e compartilha o bloco CSS; repetição depende de ativação explícita e pode ser pausada.
+`docs/pets-preview.html` reúne 144 amostras a 64/128px sobre fundos claro/escuro. A página é estática, sem CDN, e compartilha o bloco CSS; repetição depende de ativação explícita e pode ser pausada.
 
 ### Daily progress
 
@@ -289,5 +289,5 @@ Sucesso usa superfície suave e `role="status"`; erro usa tons próprios e `role
 ### Don't:
 - **Don't** apresentar esta direção provisória como identidade de marca aprovada.
 - **Don't** prolongar a saudação dos pets além de 4,8s no app ou ignorar movimento reduzido; não acrescentar sombras ou gradientes ao reproduzir esta direção.
-- **Don't** suavizar os pixels do companheiro ou transformar o selo de humor em controle.
+- **Don't** aplicar pixelated/crispEdges aos mascotes vetoriais ou transformar o selo de humor em controle.
 - **Don't** substituir rótulos de campos por placeholders ou depender somente de cor para estados.

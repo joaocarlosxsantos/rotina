@@ -574,7 +574,7 @@ label span {
   transform-origin: 50% 85%;
 }
 /* PET_MOTION_START ? shared verbatim by the static contact sheet. */
-[data-pet-kind] { image-rendering: pixelated; shape-rendering: crispEdges; overflow: visible; }
+[data-pet-kind] { image-rendering: auto; shape-rendering: geometricPrecision; overflow: visible; }
 .pet-body { transform-box: fill-box; transform-origin: center bottom; }
 .pet-eyes { transform-box: fill-box; transform-origin: center; }
 @keyframes pet-hop {
