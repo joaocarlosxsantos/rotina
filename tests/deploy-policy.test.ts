@@ -6,12 +6,18 @@ import {
   configuredDatabase,
   createDatabase,
   databaseConfiguration,
+  databaseCredentials,
 } from "../src/db/client";
 import { migrationPlan } from "../src/db/migration-policy";
 
 const remote = {
   DATABASE_URL: "libsql://policy-fixture.invalid",
   DATABASE_AUTH_TOKEN: "test-only-placeholder",
+};
+
+const turso = {
+  TURSO_DATABASE_URL: "libsql://turso-policy-fixture.invalid",
+  TURSO_AUTH_TOKEN: "turso-test-only-placeholder",
 };
 
 test("factory de baixo nível também bloqueia remoto em dev/teste antes de criar conexão", () => {
@@ -317,5 +323,188 @@ test("CLI de Preview encerra antes de abrir banco; CLI remota não autorizada fa
     assert.ok(
       !`${result.stdout}${result.stderr}`.includes(remote.DATABASE_AUTH_TOKEN),
     );
+  }
+});
+
+test("credenciais resolvem DATABASE_* primeiro e aceitam apenas TURSO_*", () => {
+  assert.deepEqual(databaseCredentials({}), { url: "" });
+  assert.deepEqual(databaseCredentials({ ...remote }), {
+    url: remote.DATABASE_URL,
+    authToken: remote.DATABASE_AUTH_TOKEN,
+  });
+  assert.deepEqual(databaseCredentials({ ...turso }), {
+    url: turso.TURSO_DATABASE_URL,
+    authToken: turso.TURSO_AUTH_TOKEN,
+  });
+  assert.deepEqual(databaseCredentials({ ...turso, ...remote }), {
+    url: remote.DATABASE_URL,
+    authToken: remote.DATABASE_AUTH_TOKEN,
+  });
+  assert.deepEqual(
+    databaseCredentials({
+      DATABASE_URL: remote.DATABASE_URL,
+      TURSO_AUTH_TOKEN: turso.TURSO_AUTH_TOKEN,
+    }),
+    {
+      url: remote.DATABASE_URL,
+      authToken: turso.TURSO_AUTH_TOKEN,
+    },
+  );
+  assert.deepEqual(
+    databaseCredentials({
+      TURSO_DATABASE_URL: turso.TURSO_DATABASE_URL,
+      DATABASE_AUTH_TOKEN: remote.DATABASE_AUTH_TOKEN,
+    }),
+    {
+      url: turso.TURSO_DATABASE_URL,
+      authToken: remote.DATABASE_AUTH_TOKEN,
+    },
+  );
+  assert.deepEqual(
+    databaseCredentials({ DATABASE_URL: "   ", ...turso }),
+    {
+      url: turso.TURSO_DATABASE_URL,
+      authToken: turso.TURSO_AUTH_TOKEN,
+    },
+  );
+});
+
+test("apenas TURSO_* funciona em runtime e na migration de produção", () => {
+  const expected = {
+    kind: "remote",
+    url: turso.TURSO_DATABASE_URL,
+    authToken: turso.TURSO_AUTH_TOKEN,
+  } as const;
+
+  assert.deepEqual(
+    databaseConfiguration({ ...turso, NODE_ENV: "production" }),
+    expected,
+  );
+  assert.deepEqual(
+    databaseConfiguration({ ...turso, VERCEL: "1", NODE_ENV: "test" }),
+    expected,
+  );
+  assert.deepEqual(
+    migrationPlan({ ...turso, VERCEL_ENV: "production" }),
+    expected,
+  );
+});
+
+test("quando os dois pares existem DATABASE_* vence em runtime e migration", () => {
+  const both = { ...turso, ...remote, NODE_ENV: "production" };
+  const expected = {
+    kind: "remote",
+    url: remote.DATABASE_URL,
+    authToken: remote.DATABASE_AUTH_TOKEN,
+  } as const;
+
+  assert.deepEqual(databaseConfiguration(both), expected);
+  assert.deepEqual(
+    migrationPlan({ ...both, VERCEL_ENV: "production" }),
+    expected,
+  );
+});
+
+test("token ausente em qualquer par falha sem revelar a URL", () => {
+  for (const env of [
+    { TURSO_DATABASE_URL: turso.TURSO_DATABASE_URL, NODE_ENV: "production" },
+    { DATABASE_URL: remote.DATABASE_URL, NODE_ENV: "production" },
+  ]) {
+    assert.throws(
+      () => databaseConfiguration(env),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.match(error.message, /AUTH_TOKEN/);
+        assert.ok(!error.message.includes("invalid"));
+        return true;
+      },
+    );
+  }
+  assert.throws(
+    () =>
+      migrationPlan({
+        TURSO_DATABASE_URL: turso.TURSO_DATABASE_URL,
+        VERCEL_ENV: "production",
+      }),
+    /AUTH_TOKEN/,
+  );
+});
+
+test("factory remota com apenas TURSO_* não vaza credenciais em erro", () => {
+  assert.throws(
+    () =>
+      configuredDatabase(
+        { ...turso, NODE_ENV: "production" },
+        process.cwd(),
+        () => {
+          throw new Error(
+            `${turso.TURSO_DATABASE_URL} ${turso.TURSO_AUTH_TOKEN}`,
+          );
+        },
+      ),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.ok(!error.message.includes(turso.TURSO_DATABASE_URL));
+      assert.ok(!error.message.includes(turso.TURSO_AUTH_TOKEN));
+      return true;
+    },
+  );
+});
+
+test("preview nunca migra com apenas TURSO_*", () => {
+  assert.deepEqual(
+    migrationPlan({
+      ...turso,
+      VERCEL_ENV: "preview",
+      ALLOW_REMOTE_MIGRATE: "1",
+      NODE_ENV: "production",
+    }),
+    { kind: "skip" },
+  );
+});
+
+test("CLI de Preview com apenas TURSO_* encerra antes de abrir banco", () => {
+  const baseEnv: NodeJS.ProcessEnv = {
+    ...process.env,
+    DATABASE_URL: "",
+    DATABASE_AUTH_TOKEN: "",
+    TURSO_DATABASE_URL: turso.TURSO_DATABASE_URL,
+    TURSO_AUTH_TOKEN: turso.TURSO_AUTH_TOKEN,
+    NODE_ENV: "production",
+    VERCEL: "1",
+    npm_lifecycle_event: "vercel-build",
+    ALLOW_REMOTE_MIGRATE: "1",
+  };
+  const preview = spawnSync(
+    process.execPath,
+    ["--import", "tsx", "scripts/migrate.ts"],
+    {
+      encoding: "utf8",
+      env: { ...baseEnv, VERCEL_ENV: "preview" },
+      timeout: 10_000,
+    },
+  );
+  assert.equal(preview.status, 0, preview.stderr);
+  assert.match(preview.stdout, /Migration ignorada/);
+  const blocked = spawnSync(
+    process.execPath,
+    ["--import", "tsx", "scripts/migrate.ts"],
+    {
+      encoding: "utf8",
+      env: {
+        ...baseEnv,
+        VERCEL_ENV: "development",
+        npm_lifecycle_event: "db:migrate",
+        ALLOW_REMOTE_MIGRATE: "",
+      },
+      timeout: 10_000,
+    },
+  );
+  assert.notEqual(blocked.status, 0);
+  assert.match(blocked.stderr, /Migration remota bloqueada/);
+  for (const result of [preview, blocked]) {
+    const output = `${result.stdout}${result.stderr}`;
+    assert.ok(!output.includes(turso.TURSO_DATABASE_URL));
+    assert.ok(!output.includes(turso.TURSO_AUTH_TOKEN));
   }
 });

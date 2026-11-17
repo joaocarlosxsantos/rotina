@@ -1,5 +1,6 @@
 import {
   databaseConfiguration,
+  databaseCredentials,
   localDatabaseUrl,
   type DatabaseEnvironment,
 } from "./client";
@@ -19,7 +20,7 @@ export function migrationPlan(
       env.VERCEL_ENV !== "production")
   )
     return { kind: "skip" };
-  const url = env.DATABASE_URL?.trim() ?? "";
+  const { url } = databaseCredentials(env);
   if (url.startsWith("libsql://")) {
     if (env.VERCEL_ENV !== "production" && env.ALLOW_REMOTE_MIGRATE !== "1") {
       throw new Error(
@@ -34,7 +35,7 @@ export function migrationPlan(
   }
   if (env.VERCEL_ENV === "production")
     throw new Error(
-      "Deploy de produção exige DATABASE_URL libsql e DATABASE_AUTH_TOKEN.",
+      "Deploy de produção exige URL libsql e token (DATABASE_* ou TURSO_*).",
     );
   if (env.NODE_ENV === "production")
     throw new Error("Migration de producao bloqueada para SQLite local.");

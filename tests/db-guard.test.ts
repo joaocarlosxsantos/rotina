@@ -172,3 +172,30 @@ test("script de migration recusa producao e URL fora do projeto sem tocar no ban
     await rm(outside, { recursive: true, force: true });
   }
 });
+
+test("TURSO_DATABASE_URL local também fica restrito ao projeto", async () => {
+  const outside = await tempDir("rotina-db-outside-");
+  try {
+    const dbPath = join(outside, "rotina.db");
+    const escaped = runMigration({
+      DATABASE_URL: "",
+      DATABASE_AUTH_TOKEN: "",
+      TURSO_DATABASE_URL: `file:${dbPath}`,
+      NODE_ENV: "test",
+    });
+    assert.notEqual(escaped.status, 0);
+    assert.match(escaped.stderr, /dentro do diretorio do projeto/);
+    assert.ok(!escaped.stderr.includes(dbPath));
+
+    const memory = runMigration({
+      DATABASE_URL: "",
+      DATABASE_AUTH_TOKEN: "",
+      TURSO_DATABASE_URL: "file::memory:",
+      NODE_ENV: "test",
+    });
+    assert.notEqual(memory.status, 0);
+    assert.match(memory.stderr, /memoria nao e permitido/);
+  } finally {
+    await rm(outside, { recursive: true, force: true });
+  }
+});
