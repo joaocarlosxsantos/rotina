@@ -6,6 +6,8 @@ import { test } from 'node:test';
 const ROOT = path.resolve(import.meta.dirname, '..');
 const CSS_PATH = path.join(ROOT, 'src', 'app', 'globals.css');
 const PAGE_PATH = path.join(ROOT, 'src', 'app', 'page.tsx');
+const HEADER_PATH = path.join(ROOT, 'src', 'app', 'header.tsx');
+const PETS_PATH = path.join(ROOT, 'src', 'app', 'pets', 'page.tsx');
 const css = fs.readFileSync(CSS_PATH, 'utf8');
 
 type Tokens = Map<string, string>;
@@ -24,6 +26,7 @@ const PAIRS: Pair[] = [
   { name: 'link no papel', fg: 'link', bg: 'paper', min: TEXT },
   { name: 'link na superfície', fg: 'link', bg: 'surface', min: TEXT },
   { name: 'link no painel', fg: 'link', bg: 'pale', min: TEXT },
+  { name: 'texto secundário no palco', fg: 'muted', bg: 'paper-muted', min: TEXT },
   { name: 'link em hover no papel', fg: 'link-hover', bg: 'paper', min: TEXT },
   { name: 'link em hover na superfície', fg: 'link-hover', bg: 'surface', min: TEXT },
   { name: 'texto do aviso', fg: 'notice-text', bg: 'notice-soft', min: TEXT },
@@ -46,7 +49,11 @@ const PAIRS: Pair[] = [
   { name: 'texto de sucesso no papel', fg: 'success-text', bg: 'paper', min: TEXT },
   { name: 'texto de sucesso na superfície', fg: 'success-text', bg: 'surface', min: TEXT },
   { name: 'item ativo da navegação', fg: 'selection-text', bg: 'selection-bg', min: TEXT },
+  { name: 'item ativo da barra de abas', fg: 'selection-text', bg: 'selection-bg', min: TEXT },
+  { name: 'texto desabilitado no painel', fg: 'disabled-text', bg: 'pale', min: TEXT },
   { name: 'botão desabilitado', fg: 'disabled-text', bg: 'disabled-bg', min: TEXT },
+  { name: 'badge do pet atual', fg: 'primary-text', bg: 'green', min: TEXT },
+  { name: 'texto do pet atual', fg: 'ink', bg: 'pale', min: TEXT },
   { name: 'borda do campo com erro', fg: 'input-error-border', bg: 'input-bg', min: UI },
   { name: 'borda do campo', fg: 'input-border', bg: 'input-bg', min: UI },
   { name: 'borda do campo em foco', fg: 'input-border-focus', bg: 'input-bg', min: UI },
@@ -66,6 +73,9 @@ const PAIRS: Pair[] = [
   { name: 'separador no papel', fg: 'line', bg: 'paper', min: UI },
   { name: 'separador na superfície', fg: 'line', bg: 'surface', min: UI },
   { name: 'separador no painel', fg: 'line', bg: 'pale', min: UI },
+  { name: 'borda do palco', fg: 'line', bg: 'paper-muted', min: UI },
+  { name: 'borda do pet atual', fg: 'green', bg: 'pale', min: UI },
+  { name: 'borda desabilitada no painel', fg: 'disabled-border', bg: 'pale', min: UI },
   { name: 'borda do aviso', fg: 'line', bg: 'notice-soft', min: UI },
   { name: 'marca da marca no papel', fg: 'accent-coral', bg: 'paper', min: UI },
   { name: 'marca da marca na superfície', fg: 'accent-coral', bg: 'surface', min: UI },
@@ -105,6 +115,13 @@ function resolveColor(token: string, tokens: Tokens): string {
   if (variable) return resolveColor(variable[1], tokens);
   assert.match(raw, /^#[0-9a-f]{6}$/i, `Token ${token} não é uma cor hexadecimal: ${raw}`);
   return raw;
+}
+
+function ruleBody(selector: string): string {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = css.match(new RegExp(`${escaped}\\s*\\{([\\s\\S]*?)\\n\\s*\\}`));
+  assert.ok(match?.[1], `Regra ${selector} não encontrada em globals.css`);
+  return match[1];
 }
 
 function hexToRgb(hex: string): [number, number, number] {
@@ -165,6 +182,82 @@ test('botões e links mantêm estados hover, active, disabled e foco distinguish
   assert.match(css, /\.inline-form button:active:not\(:disabled\)\s*\{[\s\S]*?var\(--primary-active\)/);
   assert.match(css, /button:focus-visible,\s*a:focus-visible,\s*summary:focus-visible\s*\{[\s\S]*?outline:\s*3px solid var\(--focus-ring\)/);
   assert.match(css, /button:focus-visible\s*\{\s*box-shadow:\s*0 0 0 3px var\(--focus-halo\);/);
+});
+
+test('navegação da Fase 8 usa tokens AA, foco 3px e estados não apenas por cor', () => {
+  assert.match(ruleBody('.desktop-nav a'), /color:\s*var\(--link\)/);
+  assert.match(ruleBody('.desktop-nav a:hover'), /color:\s*var\(--link-hover\)/);
+
+  const desktopActive = css.match(
+    /\.desktop-nav a\[aria-current="page"\],\s*\.desktop-nav a\.active\s*\{([\s\S]*?)\n\}/,
+  )?.[1];
+  assert.ok(desktopActive, 'Estado ativo do menu desktop não encontrado');
+  assert.match(desktopActive, /var\(--selection-text\)/);
+  assert.match(desktopActive, /var\(--selection-bg\)/);
+  assert.match(desktopActive, /text-decoration:\s*underline/);
+  assert.match(
+    ruleBody('.desktop-nav a:focus-visible'),
+    /outline:\s*3px solid var\(--focus-ring\)/,
+  );
+
+  const disabledNav = ruleBody('.nav-link-disabled');
+  assert.match(disabledNav, /min-height:\s*44px/);
+  assert.match(disabledNav, /var\(--disabled-text\)/);
+  assert.match(disabledNav, /var\(--disabled-bg\)/);
+  assert.match(disabledNav, /var\(--disabled-border\)/);
+  assert.doesNotMatch(disabledNav, /opacity:/);
+  assert.match(ruleBody('.badge-soon'), /font-size:\s*var\(--text-small\)/);
+  assert.match(ruleBody('.user-email'), /font-size:\s*var\(--text-small\)/);
+
+  const header = fs.readFileSync(HEADER_PATH, 'utf8');
+  assert.ok(header.includes('aria-disabled="true"'), 'Calendário deve estar marcado como aria-disabled');
+  assert.ok(header.includes('Em breve'), 'Calendário desktop precisa do rótulo Em breve');
+  assert.ok(header.includes('breve'), 'Calendário mobile precisa do rótulo breve');
+});
+
+test('barra de abas e /pets usam tokens AA, alvos de 44px e fonte de 14px', () => {
+  const tab = ruleBody('.tab-item');
+  assert.match(tab, /color:\s*var\(--link\)/);
+  assert.match(tab, /font-size:\s*var\(--text-small\)/);
+  assert.match(tab, /min-height:\s*56px/);
+  assert.match(ruleBody('.tab-item:focus-visible'), /outline:\s*3px solid var\(--focus-ring\)/);
+
+  const activeTab = css.match(
+    /\.tab-item\[aria-current="page"\],\s*\.tab-item\.active\s*\{([\s\S]*?)\n\s*\}/,
+  )?.[1];
+  assert.ok(activeTab, 'Estado ativo da barra de abas não encontrado');
+  assert.match(activeTab, /var\(--selection-text\)/);
+  assert.match(activeTab, /var\(--selection-bg\)/);
+  assert.match(activeTab, /text-decoration:\s*underline/);
+
+  const disabledTab = ruleBody('.tab-item.tab-disabled');
+  assert.match(disabledTab, /var\(--disabled-text\)/);
+  assert.match(disabledTab, /var\(--disabled-bg\)/);
+  assert.match(disabledTab, /var\(--disabled-border\)/);
+  assert.doesNotMatch(disabledTab, /opacity:/);
+  assert.match(ruleBody('.tab-badge'), /font-size:\s*var\(--text-small\)/);
+
+  assert.match(ruleBody('.badge-current'), /color:\s*var\(--primary-text\)/);
+  assert.match(ruleBody('.pet-preview-stage'), /background:\s*var\(--paper-muted\)/);
+  assert.match(ruleBody('.preview-mood-label'), /font-size:\s*var\(--text-small\)/);
+  assert.match(ruleBody('.pet-status-active'), /color:\s*var\(--primary-text\)/);
+  assert.match(ruleBody('.choose-btn'), /min-height:\s*48px/);
+  assert.match(ruleBody('.choose-btn'), /color:\s*var\(--primary-text\)/);
+  assert.match(
+    css,
+    /\.choose-btn:hover:not\(:disabled\)\s*\{[\s\S]*?background:\s*var\(--primary-hover\)/,
+  );
+  assert.match(
+    ruleBody('.choose-btn:focus-visible'),
+    /outline:\s*3px solid var\(--focus-ring\)/,
+  );
+
+  const petsPage = fs.readFileSync(PETS_PATH, 'utf8');
+  assert.ok(petsPage.includes('✓ Companheiro ativo'), 'Pet atual deve ter sinal textual');
+  assert.ok(
+    petsPage.includes('aria-label="Pet atualmente selecionado"'),
+    'Badge do pet atual precisa de rótulo',
+  );
 });
 
 test('tipos e alvos de toque respeitam 14px, 16px e 44px', () => {

@@ -4,6 +4,7 @@
   --font-pixel: var(--font-pixel, "Silkscreen", monospace);
 
   --paper: #f8f7f2;
+  --paper-muted: #eef1e8;
   --surface: #fffefb;
   --ink: #203e32;
   --muted: #58695e;
@@ -65,6 +66,7 @@
 @media (prefers-color-scheme: dark) {
   :root {
     --paper: #141c17;
+    --paper-muted: #17231b;
     --surface: #1c2820;
     --ink: #eef3ea;
     --muted: #9cb0a1;
@@ -1274,45 +1276,50 @@ summary {
   text-decoration: none;
   font-weight: 500;
   font-size: 0.95rem;
-  color: var(--muted);
+  color: var(--link);
   padding: 6px 12px;
   border-radius: 6px;
   transition: color 0.15s ease, background-color 0.15s ease;
 }
 
 .desktop-nav a:hover {
-  color: var(--ink);
+  color: var(--link-hover);
   background: var(--pale);
 }
 
 .desktop-nav a[aria-current="page"],
 .desktop-nav a.active {
-  color: var(--green);
+  color: var(--selection-text);
   font-weight: 700;
-  background: var(--pale);
+  background: var(--selection-bg);
+  text-decoration: underline;
+  text-underline-offset: 4px;
 }
 
 .desktop-nav a:focus-visible {
-  outline: 3px solid var(--input-focus-ring);
+  outline: 3px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
 .nav-link-disabled {
   display: inline-flex;
   align-items: center;
-  font-size: 0.95rem;
-  color: var(--muted);
-  opacity: 0.6;
+  min-height: 44px;
+  font-size: var(--text-small);
+  color: var(--disabled-text);
+  background: var(--disabled-bg);
+  border: 1px solid var(--disabled-border);
+  border-radius: 6px;
   cursor: not-allowed;
   padding: 6px 12px;
   user-select: none;
 }
 
 .badge-soon {
-  font-size: 0.7rem;
+  font-size: var(--text-small);
   font-weight: 600;
   background: var(--pale);
-  color: var(--muted);
+  color: var(--disabled-text);
   border: 1px solid var(--line);
   padding: 2px 6px;
   border-radius: 4px;
@@ -1329,7 +1336,7 @@ summary {
 }
 
 .user-email {
-  font-size: 0.85rem;
+  font-size: var(--text-small);
   color: var(--muted);
   max-width: 180px;
   white-space: nowrap;
@@ -1372,9 +1379,10 @@ summary {
     align-items: center;
     justify-content: center;
     text-decoration: none;
-    color: var(--muted);
-    font-size: 0.72rem;
+    color: var(--link);
+    font-size: var(--text-small);
     font-weight: 600;
+    min-height: 56px;
     padding: 6px 2px;
     gap: 3px;
     transition: color 0.15s ease;
@@ -1382,22 +1390,31 @@ summary {
   }
 
   .tab-item:focus-visible {
-    outline: 2px solid var(--input-focus-ring);
-    outline-offset: -2px;
+    outline: 3px solid var(--focus-ring);
+    outline-offset: -3px;
   }
 
   .tab-item[aria-current="page"],
   .tab-item.active {
-    color: var(--green);
+    color: var(--selection-text);
+    background: var(--selection-bg);
+    font-weight: 700;
+    text-decoration: underline;
+    text-underline-offset: 4px;
+    border-radius: 6px;
   }
 
   .tab-item.tab-disabled {
-    opacity: 0.5;
+    color: var(--disabled-text);
+    background: var(--disabled-bg);
+    border: 1px solid var(--disabled-border);
+    border-radius: 6px;
     cursor: not-allowed;
   }
 
   .tab-badge {
-    font-size: 0.6rem;
+    font-size: var(--text-small);
+    color: var(--disabled-text);
     background: var(--pale);
     border: 1px solid var(--line);
     border-radius: 3px;
@@ -1407,7 +1424,7 @@ summary {
 
   .user-email {
     max-width: 130px;
-    font-size: 0.78rem;
+    font-size: var(--text-small);
   }
 }
 
@@ -1426,7 +1443,7 @@ summary {
 .hero-eyebrow {
   display: inline-block;
   font-family: var(--font-pixel);
-  font-size: 0.8rem;
+  font-size: var(--text-small);
   color: var(--green);
   letter-spacing: 0.05em;
   margin-bottom: 8px;
@@ -1504,8 +1521,8 @@ summary {
   display: inline-flex;
   align-items: center;
   background: var(--green);
-  color: #fff;
-  font-size: 0.75rem;
+  color: var(--primary-text);
+  font-size: var(--text-small);
   font-weight: 700;
   padding: 4px 10px;
   border-radius: 9999px;
@@ -1516,7 +1533,7 @@ summary {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
-  background: var(--paper-muted, rgba(0, 0, 0, 0.02));
+  background: var(--paper-muted);
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 14px 6px;
@@ -1538,7 +1555,7 @@ summary {
 }
 
 .preview-mood-label {
-  font-size: 0.75rem;
+  font-size: var(--text-small);
   color: var(--muted);
   font-weight: 600;
 }
@@ -1553,7 +1570,7 @@ summary {
   justify-content: center;
   min-height: 48px;
   background: var(--green);
-  color: #fff;
+  color: var(--primary-text);
   font-weight: 700;
   font-size: 0.95rem;
   border-radius: 8px;
@@ -1568,7 +1585,7 @@ summary {
   width: 100%;
   min-height: 48px;
   background: var(--green);
-  color: #fff;
+  color: var(--primary-text);
   font-weight: 600;
   border: 1px solid var(--green);
   border-radius: 8px;
@@ -1576,11 +1593,11 @@ summary {
 }
 
 .choose-btn:hover:not(:disabled) {
-  background: var(--primary-hover, #234930);
+  background: var(--primary-hover);
 }
 
 .choose-btn:focus-visible {
-  outline: 3px solid var(--input-focus-ring);
+  outline: 3px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
