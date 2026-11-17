@@ -16,7 +16,7 @@ export async function removeCalendarAccountAction(formData: FormData) {
 
   const accountId = formData.get("accountId");
   if (typeof accountId !== "string" || !accountId.trim()) {
-    redirect("/calendario?error=Identificador+de+conta+inv%C3%A1lido.");
+    redirect("/calendario?error=invalid_account");
   }
 
   try {
@@ -24,9 +24,9 @@ export async function removeCalendarAccountAction(formData: FormData) {
     await deleteCalendarAccount(db, user, accountId.trim());
   } catch {
     console.error("Falha ao remover conta de calendário");
-    redirect("/calendario?error=N%C3%A3o+foi+poss%C3%ADvel+remover+a+conta.+Tente+novamente.");
+    redirect("/calendario?error=remove_failed");
   }
 
   revalidatePath("/calendario");
-  redirect("/calendario?success=Conta+removida+com+sucesso.");
+  redirect("/calendario?success=removed");
 }

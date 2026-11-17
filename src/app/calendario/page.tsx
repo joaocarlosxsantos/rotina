@@ -1,6 +1,6 @@
 import { requireCurrentUser } from "../../auth/server";
 import { getDatabase } from "../../db/client";
-import { getCalendarFeed, getTodayBoundsSP } from "../../lib/calendar/store";
+import { getCalendarFeed, getTodayBoundsSP, isValidCalendarHtmlLink } from "../../lib/calendar/store";
 import { TIME_ZONE } from "../../lib/rules";
 import { Header } from "../header";
 import { removeCalendarAccountAction } from "./actions";
@@ -8,6 +8,26 @@ import { Submit } from "../submit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+export const CALENDAR_ERROR_MESSAGES: Record<string, string> = {
+  access_denied: "A autorização foi cancelada ou recusada no Google.",
+  missing_params: "Sessão de autorização expirada ou incompleta. Tente conectar novamente.",
+  invalid_session: "Sessão de autorização corrompida. Tente conectar novamente.",
+  invalid_state: "Falha na validação de segurança da autorização (state inválido).",
+  user_mismatch: "A conta precisa ser vinculada pelo mesmo usuário autenticado.",
+  unconfigured: "Integração com Google Calendar indisponível ou não configurada no servidor.",
+  no_offline_access: "O Google não forneceu permissão de atualização offline. Conecte novamente autorizando o acesso.",
+  email_unverified: "A conta Google precisa ter um e-mail verificado.",
+  account_limit: "Limite máximo de 5 contas Google atingido. Remova uma conta antes de conectar outra.",
+  auth_failed: "Não foi possível autorizar a conta Google. Tente novamente.",
+  remove_failed: "Não foi possível remover a conta. Tente novamente.",
+  invalid_account: "Identificador de conta inválido.",
+};
+
+export const CALENDAR_SUCCESS_MESSAGES: Record<string, string> = {
+  connected: "Conta Google conectada com sucesso!",
+  removed: "Conta Google removida com sucesso.",
+};
 
 function formatEventTime(isoString: string, isAllDay: boolean): string {
   if (isAllDay) return "Dia inteiro";
@@ -43,6 +63,10 @@ export default async function CalendarPage({
     month: "long",
   }).format(now);
 
+  // Mapeamento estrito para códigos fixos: texto arbitrário externo é ignorado (I5)
+  const errorMessage = query.error ? CALENDAR_ERROR_MESSAGES[query.error] : undefined;
+  const successMessage = query.success ? CALENDAR_SUCCESS_MESSAGES[query.success] : undefined;
+
   return (
     <>
       <a className="skip" href="#calendario-main">
@@ -63,14 +87,14 @@ export default async function CalendarPage({
           </div>
         </div>
 
-        {query.error && (
+        {errorMessage && (
           <p className="notice error" role="alert">
-            {query.error.slice(0, 250)}
+            {errorMessage}
           </p>
         )}
-        {query.success && (
+        {successMessage && (
           <p className="notice" role="status">
-            {query.success.slice(0, 250)}
+            {successMessage}
           </p>
         )}
 
@@ -126,6 +150,7 @@ export default async function CalendarPage({
                     const endFormatted = event.endTime && !event.isAllDay
                       ? formatEventTime(event.endTime, false)
                       : null;
+                    const safeLink = event.htmlLink && isValidCalendarHtmlLink(event.htmlLink) ? event.htmlLink : null;
 
                     return (
                       <li key={event.id} className="calendar-event-card">
@@ -142,9 +167,9 @@ export default async function CalendarPage({
                             <span className="event-account-badge" title={`Conta: ${event.accountEmail}`}>
                               {event.accountEmail}
                             </span>
-                            {event.htmlLink && (
+                            {safeLink && (
                               <a
-                                href={event.htmlLink}
+                                href={safeLink}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="event-link"

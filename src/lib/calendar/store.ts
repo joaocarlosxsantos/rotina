@@ -37,6 +37,11 @@ export interface CalendarFeedResult {
   accountErrors: Record<string, string>;
 }
 
+export function isValidCalendarHtmlLink(link?: string): boolean {
+  if (!link || typeof link !== "string") return false;
+  return link.startsWith("https://www.google.com/") || link.startsWith("https://calendar.google.com/");
+}
+
 export async function listCalendarAccounts(
   db: Database,
   user: CurrentUser,
@@ -70,6 +75,21 @@ export async function saveCalendarAccount(
   },
 ): Promise<void> {
   const userId = authenticatedId(user);
+
+  // Validação do limite de até 5 contas vinculadas por usuário (B5)
+  const existingAccounts = await db
+    .select({
+      id: calendarAccounts.id,
+      googleSub: calendarAccounts.googleSub,
+    })
+    .from(calendarAccounts)
+    .where(eq(calendarAccounts.userId, userId));
+
+  const isReconnecting = existingAccounts.some((acc) => acc.googleSub === googleSub);
+  if (!isReconnecting && existingAccounts.length >= 5) {
+    throw new Error("Limite máximo de 5 contas Google atingido. Remova uma conta antes de conectar outra.");
+  }
+
   const id = randomUUID();
 
   await db
@@ -103,6 +123,7 @@ export async function deleteCalendarAccount(
   const rows = await db
     .select({
       id: calendarAccounts.id,
+      googleSub: calendarAccounts.googleSub,
       refreshTokenEnc: calendarAccounts.refreshTokenEnc,
     })
     .from(calendarAccounts)
@@ -115,9 +136,10 @@ export async function deleteCalendarAccount(
 
   const row = rows[0];
 
-  // Tenta revogar o token no Google em segundo plano
+  // Tenta revogar o token no Google em segundo plano com autenticação AAD (I1, I2)
   try {
-    const refreshToken = decryptToken(row.refreshTokenEnc);
+    const aad = `${userId}:${row.googleSub}`;
+    const refreshToken = decryptToken(row.refreshTokenEnc, undefined, aad);
     await revokeGoogleToken({ token: refreshToken, fetchFn });
   } catch {
     // Falha de decriptação ou revogação remota não impede exclusão local
@@ -199,7 +221,8 @@ export async function getCalendarFeed(
     rows.map(async (account) => {
       let accessToken: string;
       try {
-        const refreshToken = decryptToken(account.refreshTokenEnc);
+        const aad = `${userId}:${account.googleSub}`;
+        const refreshToken = decryptToken(account.refreshTokenEnc, undefined, aad);
         accessToken = await refreshGoogleAccessToken({
           refreshToken,
           clientId: config.clientId,
@@ -250,13 +273,15 @@ export async function getCalendarFeed(
 
           if (!rawStart) continue;
 
+          const safeHtmlLink = isValidCalendarHtmlLink(item.htmlLink) ? item.htmlLink : undefined;
+
           events.push({
             id: item.id ?? randomUUID(),
             title: (item.summary ?? "(Sem título)").trim() || "(Sem título)",
             startTime: rawStart,
             endTime: rawEnd,
             isAllDay,
-            htmlLink: item.htmlLink,
+            htmlLink: safeHtmlLink,
             accountEmail: account.email,
             accountId: account.id,
           });

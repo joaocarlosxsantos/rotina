@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 
 export const GOOGLE_CALENDAR_SCOPES = [
   "openid",
@@ -14,6 +14,22 @@ export class GoogleOAuthError extends Error {
     this.name = "GoogleOAuthError";
     this.isInvalidGrant = isInvalidGrant;
   }
+}
+
+/**
+ * Compara duas strings em tempo constante para evitar ataques de temporização (timing attacks).
+ * Valida previamente a equivalência de tamanho em bytes.
+ */
+export function timingSafeStringEqual(a: string, b: string): boolean {
+  if (typeof a !== "string" || typeof b !== "string") {
+    return false;
+  }
+  const bufA = Buffer.from(a, "utf8");
+  const bufB = Buffer.from(b, "utf8");
+  if (bufA.length !== bufB.length) {
+    return false;
+  }
+  return timingSafeEqual(bufA, bufB);
 }
 
 export function generateCodeVerifier(): string {
@@ -67,30 +83,8 @@ export interface GoogleUserProfile {
 }
 
 /**
- * Decodifica o payload do id_token JWT sem depender de bibliotecas externas.
- */
-export function decodeIdToken(idToken: string): GoogleUserProfile {
-  try {
-    const parts = idToken.split(".");
-    if (parts.length < 2 || !parts[1]) {
-      throw new Error("Token JWT malformado.");
-    }
-    const jsonStr = Buffer.from(parts[1], "base64url").toString("utf8");
-    const payload = JSON.parse(jsonStr) as { sub?: string; email?: string };
-    if (!payload.sub || !payload.email) {
-      throw new Error("Payload do ID token sem sub ou email.");
-    }
-    return {
-      sub: payload.sub,
-      email: payload.email.toLowerCase(),
-    };
-  } catch {
-    throw new GoogleOAuthError("Não foi possível identificar a conta Google (ID token inválido).");
-  }
-}
-
-/**
- * Troca o código de autorização e code_verifier pelo conjunto de tokens do Google.
+ * Troca o código de autorização e code_verifier pelo conjunto de tokens do Google
+ * e obtém as informações verificadas do usuário via endpoint userinfo oficial.
  */
 export async function exchangeCodeForTokens({
   code,
@@ -154,22 +148,40 @@ export async function exchangeCodeForTokens({
     );
   }
 
+  // Obtenção segura e autenticada do perfil via endpoint userinfo do Google com o access_token obtido
   let profile: GoogleUserProfile;
-  if (data.id_token) {
-    profile = decodeIdToken(data.id_token);
-  } else {
-    // Fallback: consulta endpoint userinfo se id_token não veio
-    try {
-      const userinfoRes = await fetchFn("https://openidconnect.googleapis.com/v1/userinfo", {
-        headers: { Authorization: `Bearer ${data.access_token}` },
-      });
-      if (!userinfoRes.ok) throw new Error();
-      const uData = (await userinfoRes.json()) as { sub?: string; email?: string };
-      if (!uData.sub || !uData.email) throw new Error();
-      profile = { sub: uData.sub, email: uData.email.toLowerCase() };
-    } catch {
-      throw new GoogleOAuthError("Não foi possível ler as informações de perfil da conta Google.");
+  try {
+    const userinfoRes = await fetchFn("https://openidconnect.googleapis.com/v1/userinfo", {
+      headers: { Authorization: `Bearer ${data.access_token}` },
+    });
+
+    if (!userinfoRes.ok) {
+      console.error("Falha ao consultar userinfo do Google: status", userinfoRes.status);
+      throw new Error();
     }
+
+    const uData = (await userinfoRes.json()) as {
+      sub?: string;
+      email?: string;
+      email_verified?: boolean | string;
+    };
+
+    const isEmailVerified = uData.email_verified === true || uData.email_verified === "true";
+    if (!uData.sub || !uData.email) {
+      throw new GoogleOAuthError("Dados de identificação ausentes no perfil do Google.");
+    }
+
+    if (!isEmailVerified) {
+      throw new GoogleOAuthError("O e-mail da conta Google não está verificado.");
+    }
+
+    profile = {
+      sub: uData.sub,
+      email: uData.email.toLowerCase(),
+    };
+  } catch (error) {
+    if (error instanceof GoogleOAuthError) throw error;
+    throw new GoogleOAuthError("Não foi possível validar as informações da conta Google.");
   }
 
   return {
@@ -245,6 +257,7 @@ export async function refreshGoogleAccessToken({
 
 /**
  * Tenta revogar o token no Google quando a conta é removida.
+ * Envia o token no corpo application/x-www-form-urlencoded e possui timeout de 3 segundos para não travar a remoção.
  */
 export async function revokeGoogleToken({
   token,
@@ -254,12 +267,15 @@ export async function revokeGoogleToken({
   fetchFn?: typeof fetch;
 }): Promise<void> {
   try {
-    await fetchFn(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(token)}`, {
+    const body = new URLSearchParams({ token });
+    await fetchFn("https://oauth2.googleapis.com/revoke", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.toString(),
+      signal: AbortSignal.timeout(3000),
     });
   } catch {
-    // Falha de revogação não impede a exclusão local
+    // Falha de revogação ou timeout não impede a exclusão local
     console.error("Falha ao notificar revogação ao Google; prosseguindo com remoção local.");
   }
 }

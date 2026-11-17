@@ -41,8 +41,9 @@ export function isCalendarCryptoConfigured(keyOverride?: string | Buffer): boole
 /**
  * Encripta um texto claro usando AES-256-GCM.
  * Formato retornado: v1:iv:tag:cipher (iv, tag e cipher em hexadecimal).
+ * Permite associar dados adicionais autenticados (AAD), garantindo vinculação a contexto (ex: user_id + google_sub).
  */
-export function encryptToken(plainText: string, keyOverride?: string | Buffer): string {
+export function encryptToken(plainText: string, keyOverride?: string | Buffer, aad?: string): string {
   if (typeof plainText !== "string") {
     throw new CryptoError("Texto a encriptar deve ser uma string.");
   }
@@ -54,6 +55,9 @@ export function encryptToken(plainText: string, keyOverride?: string | Buffer): 
 
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", key, iv);
+  if (aad) {
+    cipher.setAAD(Buffer.from(aad, "utf8"));
+  }
   const cipherText = Buffer.concat([cipher.update(plainText, "utf8"), cipher.final()]);
   const tag = cipher.getAuthTag();
 
@@ -62,8 +66,9 @@ export function encryptToken(plainText: string, keyOverride?: string | Buffer): 
 
 /**
  * Decripta um payload versionado no formato v1:iv:tag:cipher usando AES-256-GCM.
+ * Se o payload foi encriptado com AAD, o mesmo AAD deve ser fornecido para validar a integridade.
  */
-export function decryptToken(payload: string, keyOverride?: string | Buffer): string {
+export function decryptToken(payload: string, keyOverride?: string | Buffer, aad?: string): string {
   if (typeof payload !== "string" || !payload.startsWith("v1:")) {
     throw new CryptoError("Formato de payload encriptado inválido ou versão incompatível.");
   }
@@ -94,6 +99,9 @@ export function decryptToken(payload: string, keyOverride?: string | Buffer): st
 
     const decipher = createDecipheriv("aes-256-gcm", key, iv);
     decipher.setAuthTag(tag);
+    if (aad) {
+      decipher.setAAD(Buffer.from(aad, "utf8"));
+    }
     const decrypted = Buffer.concat([decipher.update(cipherText), decipher.final()]);
     return decrypted.toString("utf8");
   } catch (error) {
