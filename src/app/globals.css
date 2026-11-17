@@ -443,6 +443,201 @@ footer {
 .skip:focus {
   top: 12px;
 }
+nav {
+  display: flex;
+  gap: 20px;
+  font:
+    0.9rem Arial,
+    Helvetica,
+    sans-serif;
+}
+nav [aria-current="page"] {
+  font-weight: 700;
+  text-decoration-thickness: 2px;
+}
+.manage-link {
+  font:
+    0.8rem Arial,
+    Helvetica,
+    sans-serif;
+}
+.routine-heading {
+  flex-wrap: wrap;
+}
+.routine-heading h3 {
+  flex: 1 1 160px;
+}
+.weekdays {
+  border: 0;
+  padding: 0;
+  margin: 20px 0;
+  min-width: 0;
+}
+.weekdays legend {
+  font:
+    600 0.85rem Arial,
+    Helvetica,
+    sans-serif;
+}
+.weekdays legend span {
+  font-weight: 400;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.weekdays .hint {
+  margin: 8px 0 12px;
+  font-size: 0.8rem;
+}
+.day-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+.day-options label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 48px;
+  margin: 0;
+  padding: 0 4px;
+}
+.day-options input {
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+  min-height: 20px;
+  padding: 0;
+  accent-color: var(--green);
+}
+.activity-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 0.65fr);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.activity-fields > div {
+  min-width: 0;
+}
+.activity-fields small {
+  display: block;
+  font:
+    0.75rem/1.5 Arial,
+    Helvetica,
+    sans-serif;
+  color: var(--muted);
+  margin-top: 6px;
+}
+.inline-form h4 {
+  font-size: 1rem;
+  font-weight: 400;
+  margin-bottom: 16px;
+}
+.schedule {
+  display: block;
+  color: var(--muted);
+  font:
+    0.8rem/1.5 Arial,
+    Helvetica,
+    sans-serif;
+  margin-top: 6px;
+}
+.manage {
+  max-width: 940px;
+}
+.manage-intro {
+  padding-block: 40px;
+}
+.manage-intro h1 {
+  font-size: clamp(2.2rem, 5vw, 3.6rem);
+}
+.manage-intro p {
+  color: var(--muted);
+}
+.managed-routine {
+  margin-top: 24px;
+}
+.managed-routine h3,
+.managed-routine h4,
+.archive-section h3 {
+  overflow-wrap: anywhere;
+}
+.managed-activity {
+  width: 100%;
+}
+.managed-activity h4 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 400;
+}
+.edit-panel,
+.archive-confirm,
+.archived-list {
+  margin-top: 16px;
+}
+summary {
+  cursor: pointer;
+  min-height: 48px;
+  padding-block: 12px;
+  font:
+    0.88rem/1.5 Arial,
+    Helvetica,
+    sans-serif;
+  overflow-wrap: anywhere;
+}
+summary:focus-visible {
+  outline: 3px solid var(--orange);
+  outline-offset: 4px;
+}
+.edit-panel form {
+  margin-block: 12px 24px;
+}
+.archive-confirm > summary {
+  color: var(--orange);
+}
+.archive-confirm p {
+  color: var(--muted);
+  font:
+    0.85rem/1.5 Arial,
+    Helvetica,
+    sans-serif;
+  margin-bottom: 16px;
+}
+.archive-confirm button {
+  background: transparent;
+  color: var(--orange);
+  border-color: var(--orange);
+}
+.archive-confirm button:hover:not(:disabled) {
+  background: #f7e3d9;
+}
+.archived-list li,
+.archive-section li {
+  overflow-wrap: anywhere;
+}
+.archive-section {
+  margin-block: 36px;
+}
+.archive-section > ul {
+  padding-left: 20px;
+}
+.archive-section > ul > li {
+  margin-block: 24px;
+}
+.new-routine h2 {
+  margin-bottom: 20px;
+}
+@media (max-width: 650px) {
+  nav {
+    gap: 12px;
+    font-size: 0.78rem;
+  }
+  .activity-fields {
+    grid-template-columns: 1fr;
+  }
+  .topbar {
+    gap: 12px;
+  }
+}
 @media (max-width: 850px) {
   .workspace {
     grid-template-columns: minmax(0, 1fr) 280px;

@@ -8,6 +8,8 @@ import {
 export const routines = sqliteTable("routines", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
+  weekdays: integer("weekdays").notNull().default(127),
+  archivedAt: integer("archived_at"),
   createdAt: integer("created_at").notNull(),
 });
 
@@ -17,6 +19,8 @@ export const activities = sqliteTable("activities", {
     .notNull()
     .references(() => routines.id),
   name: text("name").notNull(),
+  scheduledTime: text("scheduled_time"),
+  archivedAt: integer("archived_at"),
   createdAt: integer("created_at").notNull(),
 });
 

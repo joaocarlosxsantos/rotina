@@ -56,6 +56,24 @@ typography:
     fontSize: "0.85rem"
     fontWeight: 600
     lineHeight: 1.5
+  navigation:
+    fontFamily: "Arial, Helvetica, sans-serif"
+    fontSize: "0.9rem"
+  support:
+    fontFamily: "Arial, Helvetica, sans-serif"
+    fontSize: "0.8rem"
+    lineHeight: 1.5
+  helper:
+    fontFamily: "Arial, Helvetica, sans-serif"
+    fontSize: "0.75rem"
+    lineHeight: 1.5
+  summary:
+    fontFamily: "Arial, Helvetica, sans-serif"
+    fontSize: "0.88rem"
+    lineHeight: 1.5
+  manage-display:
+    fontFamily: 'Georgia, "Times New Roman", serif'
+    fontSize: "clamp(2.2rem, 5vw, 3.6rem)"
 rounded:
   mood: "6px"
   control: "8px"
@@ -121,6 +139,16 @@ components:
   notice-error:
     backgroundColor: "{colors.error-surface}"
     textColor: "{colors.error-text}"
+  weekday-option:
+    textColor: "{colors.ink}"
+    height: "48px"
+    padding: "0 4px"
+  edit-panel:
+    textColor: "{colors.ink}"
+    padding: "12px 0"
+  archive-confirm:
+    textColor: "{colors.orange}"
+    padding: "12px 0"
 ---
 
 # Design System: Rotina Pet
@@ -182,6 +210,8 @@ Cabeçalho, conteúdo e rodapé compartilham largura máxima (1180px), com recuo
 
 A área de trabalho usa uma coluna flexível para rotinas e uma lateral (340px), separadas por (48px). Até (850px), a lateral passa para (280px), o intervalo para (24px) e os recuos para (24px). Até (650px), a área vira uma pilha com o pet depois das rotinas, intervalo (12px) e recuos (20px); o cabeçalho passa para (78px). As linhas de formulário também passam a verticais, com botão alinhado ao início.
 
+A gestão usa conteúdo em uma coluna com largura máxima (940px). Nome e horário da atividade ficam em duas colunas com intervalo (16px); até (650px), empilham. Os dias da semana são checkboxes nativos em linha flexível, com rótulos de pelo menos (48px) de altura. Edição e confirmação de arquivamento usam `details` e `summary` no contexto, sem modal.
+
 Os formulários destacados e o abrigo usam preenchimento (24px). Atividades têm preenchimento vertical (16px). Nomes longos quebram dentro das colunas. Os espaçamentos são os observados, sem pressupor que todos sejam múltiplos de uma única grade.
 
 ## Elevation & Depth
@@ -210,11 +240,17 @@ O formulário de nova rotina e o abrigo compartilham superfície suave, raio e p
 
 ### Navigation
 
-O cabeçalho contém apenas o link da assinatura para a página inicial; não há menu ou abas implementados. A assinatura serifada combina primeiro trecho em negrito, segundo regular e quadrado terracota. O link de pular conteúdo aparece ao receber foco e leva às rotinas. Links recebem foco visível.
+O cabeçalho contém a assinatura e navegação “Hoje” e “Gerenciar rotinas”; o destino atual recebe `aria-current="page"`, negrito e sublinhado mais espesso. A assinatura serifada combina primeiro trecho em negrito, segundo regular e quadrado terracota. O link de pular conteúdo aparece ao receber foco e leva ao conteúdo da tela. Links recebem foco visível.
 
 ### Routine list
 
 Cada rotina começa com linha superior, nome e contagem concluída. Cada atividade mostra nome, pontos e ação em uma linha flexível. A conclusão acrescenta texto riscado e cor secundária ao nome, além do botão desabilitado e da mensagem de pontos ganhos. O formulário de adicionar fica ao final.
+
+A tela Hoje contém somente rotinas ativas da agenda do dia e atividades ativas; horário opcional aparece antes dos pontos. “Editar e arquivar” leva à rotina em Gerenciar rotinas. Na gestão, dias aparecem como texto abreviado, e formulários de edição ficam recolhidos em disclosures nativos. Arquivar exige abrir a explicação e pressionar “Confirmar arquivamento”; o summary e o botão usam terracota, sem apagar o histórico. Itens arquivados são consultáveis em listas sem ações de edição.
+
+### Weekly schedule and optional time
+
+Os dias são um `fieldset` com `legend`, sete checkboxes nativos, texto de ajuda e foco visível. Todos vêm selecionados em novas rotinas; o servidor exige ao menos um. Horário usa `input type="time"` com passo de (60s), rótulo opcional e ajuda que explica o fuso e a possibilidade de concluir antes. Os formulários de edição reutilizam os mesmos campos da criação e mantêm rótulos e limites de nome.
 
 ### Pixel companion and mood
 

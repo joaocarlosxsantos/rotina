@@ -4,6 +4,8 @@ import { POINTS_PER_ACTIVITY, TIME_ZONE } from "../lib/rules";
 import { createActivity, createRoutine, finishActivity } from "./actions";
 import { Submit } from "./submit";
 import { Pet } from "./pet";
+import Link from "next/link";
+import { RoutineFields, ActivityFields } from "./routine-fields";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -38,7 +40,12 @@ export default async function Home({
           rotina<span>pet</span>
           <span className="brand-dot" aria-hidden="true" />
         </a>
-        <span className="local">Seu espaço de cada dia</span>
+        <nav aria-label="Principal">
+          <Link href="/" aria-current="page">
+            Hoje
+          </Link>
+          <Link href="/rotinas">Gerenciar rotinas</Link>
+        </nav>
       </header>
       <main>
         <div className="intro">
@@ -73,7 +80,7 @@ export default async function Home({
             aria-labelledby="routines-title"
           >
             <div className="section-title">
-              <h2 id="routines-title">Minhas rotinas</h2>
+              <h2 id="routines-title">Minhas rotinas de hoje</h2>
               <span>
                 {data.routines.length}{" "}
                 {data.routines.length === 1 ? "rotina" : "rotinas"}
@@ -81,10 +88,14 @@ export default async function Home({
             </div>
             {data.routines.length === 0 && (
               <div className="empty">
-                <h3>Toda jornada começa pequena.</h3>
+                <h3>Seu dia está em aberto.</h3>
                 <p>
-                  Crie uma rotina, como “Minha manhã”, e adicione uma atividade
-                  que você quer cultivar.
+                  Nenhuma rotina ativa prevista para hoje. Crie uma rotina
+                  abaixo ou{" "}
+                  <Link href="/rotinas">
+                    ajuste os dias em Gerenciar rotinas
+                  </Link>
+                  .
                 </p>
               </div>
             )}
@@ -96,6 +107,12 @@ export default async function Home({
               >
                 <div className="routine-heading">
                   <h3 id={`routine-${routine.id}`}>{routine.name}</h3>
+                  <Link
+                    className="manage-link"
+                    href={`/rotinas#routine-${routine.id}`}
+                  >
+                    Editar e arquivar
+                  </Link>
                   <span>
                     {routine.activities.filter((a) => a.done).length}/
                     {routine.activities.length}
@@ -112,6 +129,14 @@ export default async function Home({
                     >
                       <div>
                         <span className="activity-name">{activity.name}</span>
+                        {activity.scheduledTime && (
+                          <time
+                            className="schedule"
+                            dateTime={activity.scheduledTime}
+                          >
+                            {activity.scheduledTime} · São Paulo
+                          </time>
+                        )}
                         <span className="activity-points">
                           {activity.done
                             ? `${POINTS_PER_ACTIVITY} pontos ganhos hoje`
@@ -137,23 +162,9 @@ export default async function Home({
                   aria-labelledby={`add-${routine.id}`}
                 >
                   <input type="hidden" name="routineId" value={routine.id} />
-                  <label
-                    id={`add-${routine.id}`}
-                    htmlFor={`activity-${routine.id}`}
-                  >
-                    Adicionar atividade <span>(obrigatório)</span>
-                  </label>
-                  <div className="input-row">
-                    <input
-                      id={`activity-${routine.id}`}
-                      name="name"
-                      required
-                      minLength={2}
-                      maxLength={80}
-                      placeholder="Ex.: caminhar por 15 minutos"
-                    />
-                    <Submit>Adicionar</Submit>
-                  </div>
+                  <h4 id={`add-${routine.id}`}>Adicionar atividade</h4>
+                  <ActivityFields prefix={`activity-${routine.id}`} />
+                  <Submit>Adicionar</Submit>
                 </form>
               </section>
             ))}
@@ -163,20 +174,8 @@ export default async function Home({
               aria-labelledby="new-title"
             >
               <h3 id="new-title">Cultive uma nova rotina</h3>
-              <label htmlFor="routine-name">
-                Nome da rotina <span>(obrigatório)</span>
-              </label>
-              <div className="input-row">
-                <input
-                  id="routine-name"
-                  name="name"
-                  required
-                  minLength={2}
-                  maxLength={80}
-                  placeholder="Ex.: Minha manhã"
-                />
-                <Submit>Criar rotina</Submit>
-              </div>
+              <RoutineFields prefix="home-new" />
+              <Submit>Criar rotina</Submit>
             </form>
           </section>
           <aside aria-labelledby="pet-title">
