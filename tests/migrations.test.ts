@@ -14,6 +14,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { createDatabase } from "../src/db/client";
 import { migrateDatabase } from "../src/db/migrations";
 import {
@@ -26,12 +27,44 @@ import { completions, routines, activities } from "../src/db/schema";
 import { catalog } from "../src/lib/store";
 import { withDatabase } from "./helpers";
 
+test("migration de recorrência é aditiva, preserva dados e cliente antigo, e garante checks", async () => {
+  const folder = await mkdtemp(join(tmpdir(), "pg-recurrence-migration-"));
+  const connection = await createDatabase();
+  try {
+    const journal = JSON.parse(await readFile("drizzle/meta/_journal.json", "utf8"));
+    const previous = journal.entries.slice(0, -1);
+    await mkdir(join(folder, "meta"));
+    await writeFile(join(folder, "meta", "_journal.json"), JSON.stringify({ ...journal, entries: previous }));
+    for (const entry of previous) await copyFile(`drizzle/${entry.tag}.sql`, join(folder, `${entry.tag}.sql`));
+    await migrateDatabase(connection, folder);
+    const r = await connection.db.insert(routines).values({ id: randomUUID(), userId: TEST_USER.id, name: "Preservar agenda", weekdays: 62 }).returning();
+    const oldActivities = pgTable("activities", { id: uuid("id").primaryKey(), userId: text("user_id"), routineId: uuid("routine_id"), name: text("name") });
+    const id = randomUUID();
+    await connection.db.insert(oldActivities).values({ id, userId: TEST_USER.id, routineId: r[0].id, name: "Cliente anterior" });
+    const oldEvent = { id: randomUUID(), userId: TEST_USER.id, activityId: id, day: "2026-11-17", points: 10, status: "completed" as const, bonus: 0, eventOrder: 1, balanceAfter: 10 };
+    await connection.db.insert(completions).values(oldEvent);
+    await migrateDatabase(connection);
+    const saved = (await connection.db.select().from(activities))[0];
+    assert.equal(saved.id, id); assert.equal(saved.weekdays, null); assert.equal(saved.onceDate, null);
+    assert.deepEqual((await connection.db.select().from(completions))[0], oldEvent);
+    // Um cliente antigo ainda pode inserir apenas as colunas antigas após a migration.
+    await connection.db.insert(oldActivities).values({ id: randomUUID(), userId: TEST_USER.id, routineId: r[0].id, name: "Compatível" });
+    for (const schedule of [{ weekdays: 0, onceDate: null }, { weekdays: 128, onceDate: null }, { weekdays: 62, onceDate: "2026-11-20" }]) {
+      await assert.rejects(() => connection.db.insert(activities).values({ id: randomUUID(), userId: TEST_USER.id, routineId: r[0].id, name: "Inválida", ...schedule }));
+    }
+    assert.equal((await connection.db.select().from(activities)).length, 2);
+  } finally {
+    await connection.close();
+    await rm(folder, { recursive: true, force: true });
+  }
+});
+
 test("há uma migration inicial Postgres e ela é idempotente sem alterar dados", async () => {
   const journal = JSON.parse(
     await readFile("drizzle/meta/_journal.json", "utf8"),
   );
   assert.equal(journal.dialect, "postgresql");
-  assert.equal(journal.entries.length, 4);
+  assert.equal(journal.entries.length, 5);
   const connection = await createDatabase();
   try {
     await migrateDatabase(connection);
@@ -52,7 +85,7 @@ test("há uma migration inicial Postgres e ela é idempotente sem alterar dados"
     const rows = await connection.db.execute<{ count: number }>(
       sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
     );
-    assert.equal(rows.rows[0].count, 4);
+    assert.equal(rows.rows[0].count, 5);
   } finally {
     await connection.close();
   }
@@ -232,7 +265,7 @@ test("CLI aplica migration em PGlite local e repete sem mudar o journal", async 
       const result = await connection.db.execute<{ count: number }>(
         sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
       );
-      assert.equal(result.rows[0].count, 4);
+      assert.equal(result.rows[0].count, 5);
     } finally {
       await connection.close();
     }

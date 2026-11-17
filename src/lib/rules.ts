@@ -42,6 +42,105 @@ export function maskDays(mask: number): number[] {
   return ALL_WEEKDAYS.filter((day) => (mask & (1 << day)) !== 0);
 }
 
+export type ActivitySchedule = {
+  weekdays: number | null;
+  onceDate: string | null;
+};
+export type RepeatMode = "inherit" | "weekdays" | "once";
+
+export function validDate(value: unknown): string {
+  if (
+    typeof value !== "string" ||
+    value.length !== 10 ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(value) ||
+    value < "0001-01-01"
+  ) {
+    throw new InputError("Informe uma data válida no formato AAAA-MM-DD.");
+  }
+  const date = new Date(`${value}T12:00:00Z`);
+  if (
+    !Number.isFinite(date.getTime()) ||
+    date.toISOString().slice(0, 10) !== value
+  )
+    throw new InputError("Informe uma data válida no formato AAAA-MM-DD.");
+  return value;
+}
+
+export function validActivitySchedule(
+  value: unknown = { weekdays: null, onceDate: null },
+): ActivitySchedule {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new InputError("Repetição inválida. Escolha os dias ou uma data.");
+  const { weekdays, onceDate } = value as ActivitySchedule;
+  if (
+    weekdays !== null &&
+    (typeof weekdays !== "number" ||
+      !Number.isInteger(weekdays) ||
+      weekdays < 1 ||
+      weekdays > 127)
+  )
+    throw new InputError("Escolha pelo menos um dia da semana.");
+  if (onceDate !== null) validDate(onceDate);
+  if (weekdays !== null && onceDate !== null)
+    throw new InputError(
+      "Escolha dias da semana ou só uma data, nunca os dois.",
+    );
+  return { weekdays, onceDate };
+}
+
+/** Entrada do formulário é não confiável; ausência mantém compatibilidade com formulários antigos. */
+export function activityScheduleFromForm(
+  form: FormData,
+): ActivitySchedule | undefined {
+  const mode = form.get("repeatMode");
+  if (mode === null) return undefined;
+  const mask = form.get("activityWeekdays"),
+    date = form.get("onceDate");
+  if (mode === "inherit" && !mask && !date)
+    return { weekdays: null, onceDate: null };
+  if (
+    mode === "weekdays" &&
+    !date &&
+    typeof mask === "string" &&
+    /^\d{1,3}$/.test(mask)
+  )
+    return validActivitySchedule({ weekdays: Number(mask), onceDate: null });
+  if (mode === "once" && !mask)
+    return validActivitySchedule({ weekdays: null, onceDate: date });
+  throw new InputError(
+    "Repetição inválida. Escolha pelo menos um dia ou informe uma data válida.",
+  );
+}
+
+export function activityScheduledOn(
+  schedule: ActivitySchedule,
+  routineWeekdays: number,
+  day: string,
+): boolean {
+  if (schedule.onceDate !== null) return day === schedule.onceDate;
+  const weekday = new Date(`${day}T12:00:00Z`).getUTCDay();
+  return ((schedule.weekdays ?? routineWeekdays) & (1 << weekday)) !== 0;
+}
+
+export function scheduleSummary(
+  schedule: ActivitySchedule,
+  routineWeekdays: number,
+): string {
+  if (schedule.onceDate)
+    return `Só ${schedule.onceDate.slice(8, 10)}/${schedule.onceDate.slice(5, 7)}`;
+  const mask = schedule.weekdays ?? routineWeekdays;
+  if (mask === 127) return "Todo dia";
+  if (mask === 62) return "Dias úteis";
+  if (mask === 65) return "Fim de semana";
+  return maskDays(mask)
+    .map((day) => WEEKDAYS[day])
+    .join(", ");
+}
+
+export function toggleWeekday(mask: number, day: number): number {
+  return mask ^ (1 << day);
+}
+
 export function validTime(value: unknown): string | null {
   if (value === null || value === "") return null;
   if (
@@ -81,12 +180,17 @@ export function previousDay(day: string): string {
 export function currentStreak(
   completedDays: readonly string[],
   today: string,
+  isScheduled: (day: string) => boolean = () => true,
 ): number {
-  const days = new Set(completedDays);
+  const eligible = completedDays.filter((day) => day <= today);
+  if (!eligible.length) return 0;
+  const earliest = eligible.reduce((a, b) => (a < b ? a : b));
+  const days = new Set(eligible);
   let cursor = days.has(today) ? today : previousDay(today);
   let count = 0;
-  while (days.has(cursor)) {
-    count += 1;
+  while (cursor >= earliest) {
+    if (days.has(cursor)) count += 1;
+    else if (isScheduled(cursor)) break;
     cursor = previousDay(cursor);
   }
   return count;

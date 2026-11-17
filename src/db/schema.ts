@@ -31,19 +31,34 @@ export const routines = pgTable(
   ],
 );
 
-export const activities = pgTable("activities", {
-  id: uuid("id").primaryKey(),
+export const activities = pgTable(
+  "activities",
+  {
+    id: uuid("id").primaryKey(),
     userId: text("user_id"),
-  routineId: uuid("routine_id")
-    .notNull()
-    .references(() => routines.id),
-  name: text("name").notNull(),
-  scheduledTime: text("scheduled_time"),
-  archivedAt: timestamp("archived_at", { withTimezone: true }),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-});
+    routineId: uuid("routine_id")
+      .notNull()
+      .references(() => routines.id),
+    name: text("name").notNull(),
+    scheduledTime: text("scheduled_time"),
+    weekdays: integer("weekdays"),
+    onceDate: date("once_date", { mode: "string" }),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    check(
+      "activity_weekdays_valid",
+      sql`${table.weekdays} is null or ${table.weekdays} between 1 and 127`,
+    ),
+    check(
+      "activity_schedule_consistent",
+      sql`${table.weekdays} is null or ${table.onceDate} is null`,
+    ),
+  ],
+);
 
 export const completions = pgTable(
   "completions",
