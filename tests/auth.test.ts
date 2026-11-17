@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { authMode, AuthError, credentials, routeRedirect, type CurrentUser } from "../src/auth/contracts";
 import { localAdapter, LOCAL_COOKIE_OPTIONS, type SessionCookie } from "../src/auth/local";
-import { neonAuthConfig } from "../src/auth/neon";
+import { neonAdapter, neonAuthConfig, type NeonAuthClient } from "../src/auth/neon";
 import { TEST_USER, withDatabase } from "./helpers";
 
 function jar(): SessionCookie {
@@ -80,4 +80,69 @@ test("duas sessões locais recebem identidades distintas e duplicata de cadastro
     await assert.rejects(() => empty.signUp({ email: "a-auth@example.test", password: "test-password-123", name: "Pessoa X" }), AuthError);
     assert.equal(await empty.getCurrentUser(), null);
   });
+});
+test("erro do provedor Neon gera uma linha estruturada sem vazar credenciais", async () => {
+  const email = "vazamento@privado.test";
+  const password = "senha-super-secreta-123";
+  const secret = "cookie-secret-ficticio-000000000000000000";
+  const token = "eyJhbGciOi.ficticio.assinatura";
+  const providerError = {
+    status: 409,
+    code: "USER_EXISTS",
+    message: `Cadastro falhou para ${email} senha=${password} token=${token} set-cookie=${token} libsql://db.exemplo.test/rotina NEON_AUTH_COOKIE_SECRET=${secret} ${"x".repeat(250)}`,
+  };
+  const client = {
+    signIn: { email: async () => ({ error: providerError }) },
+    signUp: { email: async () => ({ error: providerError }) },
+    signOut: async () => ({ error: providerError }),
+    getSession: async () => ({ error: providerError }),
+  } as unknown as NeonAuthClient;
+  const env = { NEON_AUTH_BASE_URL: "https://auth.exemplo.test/auth", NEON_AUTH_COOKIE_SECRET: secret };
+  const input = { email, password, name: "Pessoa Teste" };
+  const leakedValues = [email, password, token, secret, "libsql://", "https://", "set-cookie="];
+
+  async function captureLog(run: () => Promise<void>) {
+    const original = console.error;
+    const lines: string[] = [];
+    console.error = (...args: unknown[]) => { lines.push(args.map(String).join(" ")); };
+    try { await run(); } finally { console.error = original; }
+    assert.equal(lines.length, 1);
+    assert.doesNotMatch(lines[0], /\n/);
+    return JSON.parse(lines[0]) as Record<string, unknown>;
+  }
+
+  const signUpEntry = await captureLog(async () => {
+    await assert.rejects(() => neonAdapter(client, env).signUp(input), /Não foi possível criar a conta/);
+  });
+  assert.deepEqual(Object.keys(signUpEntry).sort(), ["baseUrlPresent", "code", "message", "operation", "secretLongEnough", "secretPresent", "status"]);
+  assert.equal(signUpEntry.operation, "signUp");
+  assert.equal(signUpEntry.status, 409);
+  assert.equal(signUpEntry.code, "USER_EXISTS");
+  assert.equal(signUpEntry.baseUrlPresent, true);
+  assert.equal(signUpEntry.secretPresent, true);
+  assert.equal(signUpEntry.secretLongEnough, true);
+  const message = String(signUpEntry.message);
+  assert.ok(message.length <= 200);
+  assert.ok(message.includes("[email]"));
+  for (const leaked of leakedValues) assert.ok(!message.includes(leaked), `vazou: ${leaked}`);
+
+  const missingEnvEntry = await captureLog(async () => {
+    await assert.rejects(() => neonAdapter(client, {}).signUp(input), /Não foi possível criar a conta/);
+  });
+  assert.equal(missingEnvEntry.baseUrlPresent, false);
+  assert.equal(missingEnvEntry.secretPresent, false);
+  assert.equal(missingEnvEntry.secretLongEnough, false);
+
+  for (const operation of ["signIn", "signOut", "getCurrentUser"] as const) {
+    const adapter = neonAdapter(client, env);
+    const entry = await captureLog(async () => {
+      if (operation === "signIn") await assert.rejects(() => adapter.signIn({ email, password }), /Não foi possível acessar/);
+      else if (operation === "signOut") await assert.rejects(() => adapter.signOut(), /Não foi possível sair/);
+      else assert.equal(await adapter.getCurrentUser(), null);
+    });
+    assert.deepEqual(Object.keys(entry).sort(), ["code", "message", "operation", "status"]);
+    assert.equal(entry.operation, operation);
+    const text = JSON.stringify(entry);
+    for (const leaked of leakedValues) assert.ok(!text.includes(leaked), `vazou em ${operation}: ${leaked}`);
+  }
 });
