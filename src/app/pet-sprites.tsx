@@ -96,7 +96,7 @@ const FACES: Record<
   },
 };
 
-function normalizeSize(size?: number): number {
+export function normalizeSize(size?: number): number {
   if (typeof size !== "number" || !Number.isFinite(size) || size <= 0) {
     return 180;
   }

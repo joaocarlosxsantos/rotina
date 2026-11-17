@@ -1,13 +1,21 @@
+import type { petMood } from "../lib/rules";
 import { PetHappy, PetOk, PetSad } from "./pet-sprites";
 
-export function Pet({ mood }: { mood: "feliz" | "ok" | "triste" }) {
-  if (mood === "feliz") {
-    return <PetHappy className="pet pet-feliz" label="Pet feliz" />;
-  }
+type PetMood = ReturnType<typeof petMood>;
 
-  if (mood === "triste") {
-    return <PetSad className="pet pet-triste" label="Pet triste" />;
-  }
+function assertNever(value: never): never {
+  throw new Error(`Humor do pet inválido: ${String(value)}`);
+}
 
-  return <PetOk className="pet pet-ok" label="Pet ok" />;
+export function Pet({ mood }: { mood: PetMood }) {
+  switch (mood) {
+    case "feliz":
+      return <PetHappy className="pet pet-feliz" label="Pet feliz" />;
+    case "ok":
+      return <PetOk className="pet pet-ok" label="Pet de boa" />;
+    case "triste":
+      return <PetSad className="pet pet-triste" label="Pet triste" />;
+    default:
+      return assertNever(mood);
+  }
 }
