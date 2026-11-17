@@ -1,6 +1,4 @@
 import { requireCurrentUser } from "../../auth/server";
-import { signOut } from "../../app/auth-actions";
-import Link from "next/link";
 import { getDatabase } from "../../db/client";
 import { catalog } from "../../lib/store";
 import { maskDays, WEEKDAYS } from "../../lib/rules";
@@ -13,7 +11,7 @@ import {
 import { RoutineFields, ActivityFields } from "../routine-fields";
 import { ArchiveForm } from "../archive-form";
 import { Submit } from "../submit";
-import { Logo } from "../brand";
+import { Header } from "../header";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -33,18 +31,7 @@ export default async function Manage({
       <a className="skip" href="#gerenciar">
         Pular para gerenciar rotinas
       </a>
-      <header className="topbar">
-        <Link className="brand" href="/" aria-label="Rotina Pet">
-          <Logo size={32} />
-        </Link>
-        <nav aria-label="Principal">
-          <Link href="/">Hoje</Link>
-          <Link href="/rotinas" aria-current="page">
-            Gerenciar rotinas
-          </Link>
-          <form action={signOut}><button className="logout" type="submit">Sair</button></form>
-        </nav>
-      </header>
+      <Header active="rotinas" user={user} />
       <main className="manage" id="gerenciar">
         <div className="manage-intro">
           <h1>Sua rotina, do seu jeito.</h1>

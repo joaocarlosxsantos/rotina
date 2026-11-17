@@ -1,5 +1,4 @@
 import { requireCurrentUser } from "../auth/server";
-import { signOut } from "../app/auth-actions";
 import { getDatabase } from "../db/client";
 import { dashboard } from "../lib/store";
 import {
@@ -18,7 +17,7 @@ import { Submit } from "./submit";
 import { Pet } from "./pet";
 import Link from "next/link";
 import { RoutineFields, ActivityFields } from "./routine-fields";
-import { Logo } from "./brand";
+import { Header } from "./header";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -49,18 +48,7 @@ export default async function Home({
       <a className="skip" href="#rotinas">
         Pular para minhas rotinas
       </a>
-      <header className="topbar">
-        <Link href="/" className="brand" aria-label="Rotina Pet">
-          <Logo size={32} mood={data.mood} />
-        </Link>
-        <nav aria-label="Principal">
-          <Link href="/" aria-current="page">
-            Hoje
-          </Link>
-          <Link href="/rotinas">Gerenciar rotinas</Link>
-          <form action={signOut}><button className="logout" type="submit">Sair</button></form>
-        </nav>
-      </header>
+      <Header active="hoje" user={user} mood={data.mood} />
       <main>
         <div className="intro">
           <div>
@@ -229,7 +217,7 @@ export default async function Home({
                 </span>
               </div>
               <div className="pet-scene">
-                <Pet mood={data.mood} />
+                <Pet mood={data.mood} kind={data.petKind} />
                 <div className="ground" />
               </div>
               <h3>{moodCopy[data.mood]}</h3>
