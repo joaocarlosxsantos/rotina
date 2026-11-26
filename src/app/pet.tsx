@@ -1,5 +1,6 @@
 import type { petMood } from "../lib/rules";
-import { type PetKind, DEFAULT_PET_KIND, PET_CATALOG } from "../lib/pets";
+import { type PetKind, DEFAULT_PET_KIND } from "../lib/pets";
+import { getDictionary, getPetCopy, type Locale } from "../lib/i18n";
 import { PetHappy, PetOk, PetSad, PetSprite, type Mood } from "./pet-sprites";
 
 type PetMood = ReturnType<typeof petMood>;
@@ -8,30 +9,27 @@ function assertNever(value: never): never {
   throw new Error(`Humor do pet inválido: ${String(value)}`);
 }
 
-const MOOD_TO_SPRITE_MOOD: Record<PetMood, Mood> = {
+export const MOOD_TO_SPRITE_MOOD: Record<PetMood, Mood> = {
   feliz: "happy",
   ok: "ok",
   triste: "sad",
 };
 
-const MOOD_LABELS: Record<PetMood, string> = {
-  feliz: "Pet feliz",
-  ok: "Pet de boa",
-  triste: "Pet triste",
-};
-
 export function Pet({
   mood,
   kind = DEFAULT_PET_KIND,
+  locale = "pt",
 }: {
   mood: PetMood;
   kind?: PetKind;
+  locale?: Locale;
 }) {
   if (mood !== "feliz" && mood !== "ok" && mood !== "triste") {
     return assertNever(mood);
   }
 
-  const label = `${PET_CATALOG[kind].name} — ${MOOD_LABELS[mood]}`;
+  const petName = getPetCopy(kind, locale).name;
+  const label = getDictionary(locale).pets.petAriaLabel(petName, mood);
   const className = `pet pet-${mood}`;
 
   // Para o pet padrão (original), preserva os componentes exatos esperados pelos testes existentes

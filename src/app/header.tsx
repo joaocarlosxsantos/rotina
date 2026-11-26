@@ -1,6 +1,8 @@
 import Link from "next/link";
+import { getDictionary, type Locale } from "../lib/i18n";
 import { signOut } from "./auth-actions";
 import { Logo } from "./brand";
+import { LanguageSwitcher } from "./language-switcher";
 
 type ActivePage = "hoje" | "rotinas" | "pets" | "calendario";
 
@@ -11,6 +13,7 @@ export interface HeaderProps {
     name?: string | null;
   };
   mood?: "feliz" | "ok" | "triste";
+  locale?: Locale;
 }
 
 export function IconHoje() {
@@ -109,88 +112,81 @@ export function IconCalendario() {
   );
 }
 
-export function Header({ active, user, mood }: HeaderProps) {
+export function Header({ active, user, mood, locale = "pt" }: HeaderProps) {
+  const t = getDictionary(locale);
+  const navItems: ReadonlyArray<{
+    id: ActivePage;
+    href: string;
+    label: string;
+    Icon: () => React.JSX.Element;
+  }> = [
+    { id: "hoje", href: "/", label: t.nav.today, Icon: IconHoje },
+    { id: "rotinas", href: "/rotinas", label: t.nav.routines, Icon: IconRotinas },
+    { id: "pets", href: "/pets", label: t.nav.pets, Icon: IconPets },
+    { id: "calendario", href: "/calendario", label: t.nav.calendar, Icon: IconCalendario },
+  ];
+
   return (
     <>
       <header className="topbar app-topbar">
-        <Link href="/" className="brand" aria-label="Rotina Pet">
-          <Logo size={32} mood={mood} />
+        <Link href="/" className="brand" aria-label={t.common.brandName}>
+          <Logo size={32} mood={mood} title={t.common.brandName} />
         </Link>
-        <nav className="desktop-nav" aria-label="Principal">
+        <nav className="desktop-nav" aria-label={t.nav.primaryAria}>
           <Link
             href="/"
             aria-current={active === "hoje" ? "page" : undefined}
             className={active === "hoje" ? "active" : undefined}
           >
-            Hoje
+            {t.nav.today}
           </Link>
           <Link
             href="/rotinas"
             aria-current={active === "rotinas" ? "page" : undefined}
             className={active === "rotinas" ? "active" : undefined}
           >
-            Rotinas
+            {t.nav.routines}
           </Link>
           <Link
             href="/pets"
             aria-current={active === "pets" ? "page" : undefined}
             className={active === "pets" ? "active" : undefined}
           >
-            Pets
+            {t.nav.pets}
           </Link>
           <Link
             href="/calendario"
             aria-current={active === "calendario" ? "page" : undefined}
             className={active === "calendario" ? "active" : undefined}
           >
-            Calendário
+            {t.nav.calendar}
           </Link>
         </nav>
         <div className="user-menu">
+          <LanguageSwitcher locale={locale} />
           <span className="user-email" title={user.email}>
             {user.email}
           </span>
           <form action={signOut}>
             <button className="logout" type="submit">
-              Sair
+              {t.nav.signOut}
             </button>
           </form>
         </div>
       </header>
 
-      <nav className="mobile-tab-bar" aria-label="Navegação rápida">
-        <Link
-          href="/"
-          className={`tab-item ${active === "hoje" ? "active" : ""}`}
-          aria-current={active === "hoje" ? "page" : undefined}
-        >
-          <IconHoje />
-          <span>Hoje</span>
-        </Link>
-        <Link
-          href="/rotinas"
-          className={`tab-item ${active === "rotinas" ? "active" : ""}`}
-          aria-current={active === "rotinas" ? "page" : undefined}
-        >
-          <IconRotinas />
-          <span>Rotinas</span>
-        </Link>
-        <Link
-          href="/pets"
-          className={`tab-item ${active === "pets" ? "active" : ""}`}
-          aria-current={active === "pets" ? "page" : undefined}
-        >
-          <IconPets />
-          <span>Pets</span>
-        </Link>
-        <Link
-          href="/calendario"
-          className={`tab-item ${active === "calendario" ? "active" : ""}`}
-          aria-current={active === "calendario" ? "page" : undefined}
-        >
-          <IconCalendario />
-          <span>Calendário</span>
-        </Link>
+      <nav className="mobile-tab-bar" aria-label={t.nav.quickAria}>
+        {navItems.map(({ id, href, label, Icon }) => (
+          <Link
+            key={id}
+            href={href}
+            className={`tab-item ${active === id ? "active" : ""}`}
+            aria-current={active === id ? "page" : undefined}
+          >
+            <Icon />
+            <span>{label}</span>
+          </Link>
+        ))}
       </nav>
     </>
   );

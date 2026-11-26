@@ -18,6 +18,7 @@ export async function proxy(request: NextRequest) {
     return await getNeonAuth().middleware({
       loginUrl: "/entrar",
       publicRoutes: [
+        "/",
         "/entrar",
         "/criar-conta",
         "/favicon.ico",

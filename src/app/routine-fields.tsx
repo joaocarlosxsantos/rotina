@@ -1,24 +1,29 @@
 import {
   ALL_WEEKDAYS,
-  WEEKDAYS,
   dayKey,
   type ActivitySchedule,
 } from "../lib/rules";
+import { getDictionary, WEEKDAYS_BY_LOCALE, type Locale } from "../lib/i18n";
 import { ActivityRecurrence } from "./activity-recurrence";
 
 export function RoutineFields({
   prefix,
   name = "",
   days = ALL_WEEKDAYS,
+  locale = "pt",
 }: {
   prefix: string;
   name?: string;
   days?: readonly number[];
+  locale?: Locale;
 }) {
+  const t = getDictionary(locale).fields;
+  const weekdays = WEEKDAYS_BY_LOCALE[locale];
+
   return (
     <>
       <label htmlFor={`${prefix}-name`}>
-        Nome da rotina <span>(obrigatório)</span>
+        {t.routineNameLabel} <span>{t.requiredTag}</span>
       </label>
       <input
         id={`${prefix}-name`}
@@ -27,17 +32,17 @@ export function RoutineFields({
         minLength={2}
         maxLength={80}
         defaultValue={name}
-        placeholder="Ex.: Minha manhã"
+        placeholder={t.routineNamePlaceholder}
       />
       <fieldset className="weekdays" aria-describedby={`${prefix}-days-help`}>
         <legend>
-          Dias da semana <span>(obrigatório)</span>
+          {t.weekdaysLegend} <span>{t.requiredTag}</span>
         </legend>
         <p id={`${prefix}-days-help`} className="hint">
-          Escolha ao menos um dia. A agenda segue o fuso de São Paulo.
+          {t.weekdaysHint}
         </p>
         <div className="day-options">
-          {WEEKDAYS.map((day, index) => (
+          {weekdays.map((day, index) => (
             <label key={day} htmlFor={`${prefix}-day-${index}`}>
               <input
                 id={`${prefix}-day-${index}`}
@@ -62,6 +67,7 @@ export function ActivityFields({
   routineWeekdays = 127,
   schedule = { weekdays: null, onceDate: null },
   today = dayKey(),
+  locale = "pt",
 }: {
   prefix: string;
   name?: string;
@@ -69,12 +75,15 @@ export function ActivityFields({
   routineWeekdays?: number;
   schedule?: ActivitySchedule;
   today?: string;
+  locale?: Locale;
 }) {
+  const t = getDictionary(locale).fields;
+
   return (
     <div className="activity-fields">
       <div>
         <label htmlFor={`${prefix}-name`}>
-          Nome da atividade <span>(obrigatório)</span>
+          {t.activityNameLabel} <span>{t.requiredTag}</span>
         </label>
         <input
           id={`${prefix}-name`}
@@ -83,12 +92,12 @@ export function ActivityFields({
           minLength={2}
           maxLength={80}
           defaultValue={name}
-          placeholder="Ex.: caminhar por 15 minutos"
+          placeholder={t.activityNamePlaceholder}
         />
       </div>
       <div>
         <label htmlFor={`${prefix}-time`}>
-          Horário <span>(opcional)</span>
+          {t.timeLabel} <span>{t.optionalTag}</span>
         </label>
         <input
           id={`${prefix}-time`}
@@ -98,15 +107,14 @@ export function ActivityFields({
           defaultValue={time ?? ""}
           aria-describedby={`${prefix}-time-help`}
         />
-        <small id={`${prefix}-time-help`}>
-          Referência em São Paulo; não bloqueia a conclusão.
-        </small>
+        <small id={`${prefix}-time-help`}>{t.timeHint}</small>
       </div>
       <ActivityRecurrence
         prefix={prefix}
         routineWeekdays={routineWeekdays}
         schedule={schedule}
         today={today}
+        locale={locale}
       />
     </div>
   );

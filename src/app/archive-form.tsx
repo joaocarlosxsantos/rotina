@@ -1,3 +1,4 @@
+import { getDictionary, type Locale } from "../lib/i18n";
 import { hideActivity, hideRoutine } from "./actions";
 import { Submit } from "./submit";
 
@@ -5,25 +6,22 @@ export function ArchiveForm({
   kind,
   id,
   name,
+  locale = "pt",
 }: {
   kind: "routine" | "activity";
   id: string;
   name: string;
+  locale?: Locale;
 }) {
-  const label = kind === "routine" ? "rotina" : "atividade";
+  const t = getDictionary(locale).manage.archive;
+  const noun = kind === "routine" ? t.routineNoun : t.activityNoun;
   return (
     <details className="archive-confirm">
-      <summary>
-        Arquivar {label}: {name}
-      </summary>
-      <p>
-        Arquivar oculta{" "}
-        {label === "rotina" ? "a rotina e suas atividades" : "a atividade"} do
-        dia. Histórico e pontos permanecem guardados.
-      </p>
+      <summary>{t.summary(noun, name)}</summary>
+      <p>{t.warning(kind === "routine")}</p>
       <form
         action={kind === "routine" ? hideRoutine : hideActivity}
-        aria-label={`Confirmar arquivamento de ${name}`}
+        aria-label={t.ariaLabel(name)}
       >
         <input
           type="hidden"
@@ -31,7 +29,7 @@ export function ArchiveForm({
           value={id}
         />
         <input type="hidden" name="returnTo" value="/rotinas" />
-        <Submit>Confirmar arquivamento</Submit>
+        <Submit locale={locale}>{t.confirmBtn}</Submit>
       </form>
     </details>
   );

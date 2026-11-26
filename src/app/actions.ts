@@ -21,22 +21,28 @@ import {
   skipMessage,
   activityScheduleFromForm,
 } from "../lib/rules";
+import { getDictionary, localizeErrorMessage, type Locale } from "../lib/i18n";
+import { getLocale } from "../lib/i18n-server";
 
 async function mutate<T>(
   work: () => Promise<T>,
-  message: string | ((result: T) => string),
+  message: string | ((result: T, locale: Locale) => string),
   destination = "/",
 ) {
+  const locale = await getLocale();
+  const t = getDictionary(locale).serverMessages;
   let error: string | undefined;
   let success = "";
   try {
     const result = await work();
-    success = typeof message === "function" ? message(result) : message;
+    success = typeof message === "function" ? message(result, locale) : message;
   } catch (cause) {
     error =
       cause instanceof InputError
-        ? cause.message
-        : "Não foi possível salvar. Tente novamente mais tarde.";
+        ? localizeErrorMessage(cause.message, locale)
+        : locale === "en"
+          ? t.genericSaveError
+          : "Não foi possível salvar. Tente novamente mais tarde.";
     if (!(cause instanceof InputError))
       console.error("Falha ao processar a ação.");
   }
@@ -53,6 +59,8 @@ function destination(form: FormData) {
 
 export async function createRoutine(form: FormData) {
   const user = await requireCurrentUser();
+  const locale = await getLocale();
+  const msg = getDictionary(locale).serverMessages.routineCreated;
   await mutate(
     async () =>
       addRoutine(
@@ -61,12 +69,15 @@ export async function createRoutine(form: FormData) {
         form.get("name"),
         form.getAll("days"),
       ),
-    "Rotina criada. Agora adicione suas atividades.",
+    msg,
     destination(form),
   );
 }
+
 export async function createActivity(form: FormData) {
   const user = await requireCurrentUser();
+  const locale = await getLocale();
+  const msg = getDictionary(locale).serverMessages.activityAdded;
   await mutate(
     async () =>
       addActivity(
@@ -77,13 +88,15 @@ export async function createActivity(form: FormData) {
         form.get("time"),
         activityScheduleFromForm(form),
       ),
-    "Atividade adicionada à sua rotina.",
+    msg,
     destination(form),
   );
 }
 
 export async function editRoutine(form: FormData) {
   const user = await requireCurrentUser();
+  const locale = await getLocale();
+  const msg = getDictionary(locale).serverMessages.routineUpdated;
   await mutate(
     async () =>
       updateRoutine(
@@ -93,13 +106,15 @@ export async function editRoutine(form: FormData) {
         form.get("name"),
         form.getAll("days"),
       ),
-    "Rotina atualizada.",
+    msg,
     destination(form),
   );
 }
 
 export async function editActivity(form: FormData) {
   const user = await requireCurrentUser();
+  const locale = await getLocale();
+  const msg = getDictionary(locale).serverMessages.activityUpdated;
   await mutate(
     async () =>
       updateActivity(
@@ -110,36 +125,41 @@ export async function editActivity(form: FormData) {
         form.get("time"),
         activityScheduleFromForm(form),
       ),
-    "Atividade atualizada.",
+    msg,
     destination(form),
   );
 }
 
 export async function hideRoutine(form: FormData) {
   const user = await requireCurrentUser();
+  const locale = await getLocale();
+  const msg = getDictionary(locale).serverMessages.routineArchived;
   await mutate(
     async () =>
       archiveRoutine(await getDatabase(), user, form.get("routineId")),
-    "Rotina arquivada. Histórico e pontos preservados.",
+    msg,
     destination(form),
   );
 }
 
 export async function hideActivity(form: FormData) {
   const user = await requireCurrentUser();
+  const locale = await getLocale();
+  const msg = getDictionary(locale).serverMessages.activityArchived;
   await mutate(
     async () =>
       archiveActivity(await getDatabase(), user, form.get("activityId")),
-    "Atividade arquivada. Histórico e pontos preservados.",
+    msg,
     destination(form),
   );
 }
+
 export async function finishActivity(form: FormData) {
   const user = await requireCurrentUser();
   await mutate(
     async () =>
       completeActivity(await getDatabase(), user, form.get("activityId")),
-    completionMessage,
+    (completed, locale) => completionMessage(completed, locale),
   );
 }
 
@@ -147,16 +167,18 @@ export async function passActivity(form: FormData) {
   const user = await requireCurrentUser();
   await mutate(
     async () => skipActivity(await getDatabase(), user, form.get("activityId")),
-    skipMessage,
+    (skipped, locale) => skipMessage(skipped, locale),
   );
 }
 
 export async function selectPet(form: FormData) {
   const user = await requireCurrentUser();
+  const locale = await getLocale();
+  const msg = getDictionary(locale).serverMessages.petUpdated;
   const petKind = form.get("petKind");
   await mutate(
     async () => setUserPet(await getDatabase(), user, petKind),
-    "Companheiro atualizado com sucesso!",
+    msg,
     "/pets",
   );
 }

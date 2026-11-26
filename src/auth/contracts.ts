@@ -30,8 +30,9 @@ export function credentials(input: Credentials, signup = false): Credentials {
   return { email, password, ...(signup ? { name } : {}) };
 }
 export function routeRedirect(path: string, user: CurrentUser | null) {
-  const publicPage = path === "/entrar" || path === "/criar-conta";
+  const authPage = path === "/entrar" || path === "/criar-conta";
+  const publicPage = path === "/" || authPage;
   if (!user && !publicPage) return "/entrar";
-  if (user && publicPage) return "/";
+  if (user && authPage) return "/";
   return null;
 }

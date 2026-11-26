@@ -213,12 +213,13 @@ test('Proxy e matcher excluem assets públicos e continuam protegendo rotas priv
     assert.equal(res.headers.get('location'), null, `${asset} não deve redirecionar anônimo`);
   }
 
-  // 2. Rotas protegidas (dados, home, rotinas, api) continuam no matcher e redirecionam anônimo
+  // 2. Rotas protegidas (rotinas, api) continuam no matcher e redirecionam anônimo; raiz exibe boas-vindas
+  assert.equal(routeRedirect('/', null), null, 'Anônimo em / acessa a tela de boas-vindas');
   const protectedRoutes = ['/', '/rotinas', '/rotinas/qualquer', '/api/dados', '/api/auth/session'];
   for (const route of protectedRoutes) {
     assert.equal(isPublicAsset(route), false, `${route} não deve ser considerado asset público`);
     assert.equal(matcherRegex.test(route), true, `${route} deve ser capturado pelo matcher do middleware`);
-    if (route === '/' || route.startsWith('/rotinas')) {
+    if (route.startsWith('/rotinas')) {
       assert.equal(routeRedirect(route, null), '/entrar', `Anônimo em ${route} deve redirecionar para /entrar`);
     }
   }

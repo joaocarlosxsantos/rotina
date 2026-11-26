@@ -35,8 +35,10 @@ test("servidor valida credenciais e não altera senha com trim", () => {
   assert.deepEqual(credentials({ email: " Pessoa@Example.test ", password: " 12345678 " }), { email: "pessoa@example.test", password: " 12345678 " });
   for (const input of [{ email: "bad", password: "12345678" }, { email: "a@b.test", password: "short" }, { email: "a@b.test", password: "a".repeat(129) }, { email: "a@b.test", password: "12345678", name: "x" }]) assert.throws(() => credentials(input, true), AuthError);
 });
-test("redirecionamentos são fixos: ausência de sessão protege dados; autenticado sai das telas públicas", () => {
-  for (const path of ["/", "/rotinas", "/rotinas/qualquer", "//outside.test"]) assert.equal(routeRedirect(path, null), "/entrar");
+test("redirecionamentos são fixos: ausência de sessão protege dados; raiz e telas de acesso são públicas; autenticado sai das telas de acesso", () => {
+  for (const path of ["/rotinas", "/rotinas/qualquer", "/pets", "/calendario", "//outside.test"]) assert.equal(routeRedirect(path, null), "/entrar");
+  assert.equal(routeRedirect("/", null), null);
+  assert.equal(routeRedirect("/", TEST_USER), null);
   for (const path of ["/entrar", "/criar-conta"]) {
     assert.equal(routeRedirect(path, null), null);
     assert.equal(routeRedirect(path, TEST_USER), "/");

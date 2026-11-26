@@ -2,31 +2,36 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
-  WEEKDAYS,
   scheduleSummary,
   toggleWeekday,
   type ActivitySchedule,
   type RepeatMode,
 } from "../lib/rules";
+import { getDictionary, WEEKDAYS_BY_LOCALE, type Locale } from "../lib/i18n";
 
 export function WeekdayChips({
   mask,
   onChange,
   errorId,
+  locale = "pt",
 }: {
   mask: number;
   onChange: (mask: number) => void;
   errorId: string;
+  locale?: Locale;
 }) {
+  const t = getDictionary(locale).fields;
+  const weekdays = WEEKDAYS_BY_LOCALE[locale];
+
   return (
     <div
       className="recurrence-days"
       role="group"
-      aria-label="Dias da atividade"
+      aria-label={t.activityDaysAria}
       aria-invalid={mask === 0}
       aria-describedby={mask === 0 ? errorId : undefined}
     >
-      {WEEKDAYS.map((day, index) => (
+      {weekdays.map((day, index) => (
         <button
           key={day}
           type="button"
@@ -45,12 +50,15 @@ export function ActivityRecurrence({
   routineWeekdays,
   schedule,
   today,
+  locale = "pt",
 }: {
   prefix: string;
   routineWeekdays: number;
   schedule: ActivitySchedule;
   today: string;
+  locale?: Locale;
 }) {
+  const t = getDictionary(locale).fields;
   const [mode, setMode] = useState<RepeatMode>(
     schedule.onceDate
       ? "once"
@@ -80,13 +88,13 @@ export function ActivityRecurrence({
       className="activity-recurrence"
       aria-describedby={`${prefix}-repeat-help`}
     >
-      <legend>Repetição</legend>
+      <legend>{t.recurrenceLegend}</legend>
       <div className="recurrence-modes">
         {(
           [
-            ["inherit", "Segue a rotina"],
-            ["weekdays", "Dias da semana"],
-            ["once", "Só uma vez"],
+            ["inherit", t.repeatModes.inherit],
+            ["weekdays", t.repeatModes.weekdays],
+            ["once", t.repeatModes.once],
           ] as const
         ).map(([value, label]) => (
           <label key={value} htmlFor={`${prefix}-repeat-${value}`}>
@@ -104,18 +112,24 @@ export function ActivityRecurrence({
       </div>
       <p id={`${prefix}-repeat-help`} className="hint">
         {mode === "inherit"
-          ? `Dias da rotina: ${scheduleSummary({ weekdays: null, onceDate: null }, routineWeekdays)}.`
-          : "A agenda segue o dia de São Paulo."}
+          ? t.inheritHint(
+              scheduleSummary(
+                { weekdays: null, onceDate: null },
+                routineWeekdays,
+                locale,
+              ),
+            )
+          : t.spDayHint}
       </p>
       {mode === "weekdays" && (
         <>
           <input type="hidden" name="activityWeekdays" value={mask} />
-          <div className="recurrence-presets" aria-label="Atalhos de dias">
+          <div className="recurrence-presets" aria-label={t.presetsAria}>
             {(
               [
-                [127, "Todos"],
-                [62, "Dias úteis"],
-                [65, "Fim de semana"],
+                [127, t.presets.all],
+                [62, t.presets.weekdays],
+                [65, t.presets.weekend],
               ] as const
             ).map(([value, label]) => (
               <button key={value} type="button" onClick={() => setMask(value)}>
@@ -123,17 +137,22 @@ export function ActivityRecurrence({
               </button>
             ))}
           </div>
-          <WeekdayChips mask={mask} onChange={setMask} errorId={errorId} />
+          <WeekdayChips
+            mask={mask}
+            onChange={setMask}
+            errorId={errorId}
+            locale={locale}
+          />
           {mask === 0 && (
             <p className="recurrence-error" id={errorId} role="alert">
-              Escolha pelo menos um dia da semana.
+              {t.chooseOneDayError}
             </p>
           )}
         </>
       )}
       {mode === "once" && (
         <div className="recurrence-date">
-          <label htmlFor={`${prefix}-once`}>Data (obrigatória)</label>
+          <label htmlFor={`${prefix}-once`}>{t.onceDateLabel}</label>
           <input
             id={`${prefix}-once`}
             type="date"

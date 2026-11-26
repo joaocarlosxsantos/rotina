@@ -1,3 +1,5 @@
+import { getDictionary, WEEKDAYS_BY_LOCALE, type Locale } from "./i18n";
+
 export const POINTS_PER_ACTIVITY = 10;
 export const SKIP_PENALTY = 5;
 export const MAX_STREAK_BONUS = 5;
@@ -143,15 +145,18 @@ export function precomputeScheduledDays(
 export function scheduleSummary(
   schedule: ActivitySchedule,
   routineWeekdays: number,
+  locale: Locale = "pt",
 ): string {
+  const t = getDictionary(locale).rules;
   if (schedule.onceDate)
-    return `Só ${schedule.onceDate.slice(8, 10)}/${schedule.onceDate.slice(5, 7)}`;
+    return t.onlyOn(schedule.onceDate.slice(8, 10), schedule.onceDate.slice(5, 7));
   const mask = schedule.weekdays ?? routineWeekdays;
-  if (mask === 127) return "Todo dia";
-  if (mask === 62) return "Dias úteis";
-  if (mask === 65) return "Fim de semana";
+  if (mask === 127) return t.everyDay;
+  if (mask === 62) return t.weekdays;
+  if (mask === 65) return t.weekend;
+  const days = WEEKDAYS_BY_LOCALE[locale];
   return maskDays(mask)
-    .map((day) => WEEKDAYS[day])
+    .map((day) => days[day])
     .join(", ");
 }
 
@@ -177,16 +182,14 @@ export function weekdaySP(date: Date): number {
   return new Date(`${dayKey(date)}T12:00:00Z`).getUTCDay();
 }
 
-export function completionMessage(completed: boolean): string {
-  return completed
-    ? "Conclusão registrada. Cada atividade vale pontos uma vez por dia."
-    : "Já concluída hoje";
+export function completionMessage(completed: boolean, locale: Locale = "pt"): string {
+  const t = getDictionary(locale).rules;
+  return completed ? t.completedOk : t.alreadyCompleted;
 }
 
-export function skipMessage(skipped: boolean): string {
-  return skipped
-    ? `Atividade pulada. Desconto de até ${SKIP_PENALTY} pontos aplicado, respeitando o saldo mínimo de zero.`
-    : "Já pulada hoje";
+export function skipMessage(skipped: boolean, locale: Locale = "pt"): string {
+  const t = getDictionary(locale).rules;
+  return skipped ? t.skippedOk(SKIP_PENALTY) : t.alreadySkipped;
 }
 
 export function previousDay(day: string): string {

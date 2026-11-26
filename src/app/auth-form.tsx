@@ -2,9 +2,17 @@
 
 import { useActionState, useState } from "react";
 import Link from "next/link";
+import { getDictionary, type Locale } from "../lib/i18n";
 import { authenticate, type AuthState } from "./auth-actions";
 
-export function AuthForm({ signup = false }: { signup?: boolean }) {
+export function AuthForm({
+  signup = false,
+  locale = "pt",
+}: {
+  signup?: boolean;
+  locale?: Locale;
+}) {
+  const t = getDictionary(locale).auth;
   const [state, action, pending] = useActionState(
     authenticate.bind(null, signup ? "signup" : "signin"),
     {} as AuthState,
@@ -20,7 +28,7 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
       )}
       {signup && (
         <div className="auth-field">
-          <label htmlFor="auth-name">Seu nome</label>
+          <label htmlFor="auth-name">{t.nameLabel}</label>
           <input
             id="auth-name"
             name="name"
@@ -30,13 +38,13 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
             minLength={2}
             maxLength={80}
             defaultValue={state.name}
-            placeholder="Como podemos te chamar?"
+            placeholder={t.namePlaceholder}
             disabled={pending}
           />
         </div>
       )}
       <div className="auth-field">
-        <label htmlFor="auth-email">E-mail</label>
+        <label htmlFor="auth-email">{t.emailLabel}</label>
         <input
           id="auth-email"
           name="email"
@@ -46,13 +54,13 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
           required
           maxLength={254}
           defaultValue={state.email}
-          placeholder="seu@email.com"
+          placeholder={t.emailPlaceholder}
           disabled={pending}
           aria-describedby={state.error ? "auth-error" : undefined}
         />
       </div>
       <div className="auth-field">
-        <label htmlFor="auth-password">Senha</label>
+        <label htmlFor="auth-password">{t.passwordLabel}</label>
         <div className="password-input-group">
           <input
             id="auth-password"
@@ -62,40 +70,40 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
             required
             minLength={8}
             maxLength={128}
-            placeholder={signup ? "No mínimo 8 caracteres" : "Sua senha"}
+            placeholder={signup ? t.passwordPlaceholderSignUp : t.passwordPlaceholderSignIn}
             disabled={pending}
             aria-describedby="password-help"
           />
         </div>
         <div className="password-tools">
           <span className="hint" id="password-help">
-            De 8 a 128 caracteres.
+            {t.passwordHint}
           </span>
           <button
             type="button"
             className="password-toggle"
             aria-controls="auth-password"
             aria-pressed={show}
-            aria-label={show ? "Ocultar senha digitada" : "Mostrar senha digitada"}
+            aria-label={show ? t.hidePasswordAria : t.showPasswordAria}
             onClick={() => setShow(!show)}
           >
-            {show ? "Ocultar senha" : "Mostrar senha"}
+            {show ? t.hidePassword : t.showPassword}
           </button>
         </div>
       </div>
       <button type="submit" disabled={pending}>
         {pending
           ? signup
-            ? "Criando conta…"
-            : "Entrando…"
+            ? t.creatingAccount
+            : t.signingIn
           : signup
-            ? "Criar conta"
-            : "Entrar"}
+            ? t.createAccountBtn
+            : t.signInBtn}
       </button>
       <p className="auth-alternative">
-        {signup ? "Já tem uma conta?" : "Ainda não tem uma conta?"}{" "}
+        {signup ? t.alreadyHaveAccount : t.noAccountYet}{" "}
         <Link href={signup ? "/entrar" : "/criar-conta"}>
-          {signup ? "Entrar" : "Criar conta"}
+          {signup ? t.goToSignIn : t.goToSignUp}
         </Link>
       </p>
     </form>

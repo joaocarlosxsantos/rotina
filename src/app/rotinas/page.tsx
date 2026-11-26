@@ -1,20 +1,28 @@
+import type { Metadata } from "next";
 import { requireCurrentUser } from "../../auth/server";
 import { getDatabase } from "../../db/client";
+import { getDictionary, WEEKDAYS_BY_LOCALE } from "../../lib/i18n";
+import { getLocale } from "../../lib/i18n-server";
+import { dayKey, maskDays, scheduleSummary } from "../../lib/rules";
 import { catalog } from "../../lib/store";
-import { maskDays, WEEKDAYS, dayKey, scheduleSummary } from "../../lib/rules";
 import {
   createActivity,
   createRoutine,
   editActivity,
   editRoutine,
 } from "../actions";
-import { RoutineFields, ActivityFields } from "../routine-fields";
 import { ArchiveForm } from "../archive-form";
-import { Submit } from "../submit";
 import { Header } from "../header";
+import { ActivityFields, RoutineFields } from "../routine-fields";
+import { Submit } from "../submit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getLocale();
+  return { title: getDictionary(locale).meta.routinesTitle };
+}
 
 export default async function Manage({
   searchParams,
@@ -22,42 +30,40 @@ export default async function Manage({
   searchParams: Promise<{ error?: string; success?: string }>;
 }) {
   const user = await requireCurrentUser();
+  const locale = await getLocale();
+  const dict = getDictionary(locale);
+  const t = dict.manage;
+  const weekdays = WEEKDAYS_BY_LOCALE[locale];
   const today = dayKey();
   const rows = await catalog(await getDatabase(), user);
   const query = await searchParams;
   const active = rows.filter((row) => row.archivedAt === null);
   const archived = rows.filter((row) => row.archivedAt !== null);
+
   return (
     <>
       <a className="skip" href="#gerenciar">
-        Pular para gerenciar rotinas
+        {t.skipLink}
       </a>
-      <Header active="rotinas" user={user} />
+      <Header active="rotinas" user={user} locale={locale} />
       <main className="manage" id="gerenciar">
         <div className="manage-intro">
-          <h1>Sua rotina, do seu jeito.</h1>
-          <p>
-            Organize os dias, ajuste atividades e guarde o que já fez parte da
-            sua jornada.
-          </p>
+          <h1>{t.title}</h1>
+          <p>{t.subtitle}</p>
         </div>
-        {query.error && (
+        {typeof query.error === "string" && query.error && (
           <p className="notice error" role="alert">
             {query.error.slice(0, 200)}
           </p>
         )}
-        {query.success && (
+        {typeof query.success === "string" && query.success && (
           <p className="notice" role="status">
             {query.success.slice(0, 200)}
           </p>
         )}
         <section aria-labelledby="active-title">
-          <h2 id="active-title">Todas as rotinas ativas</h2>
-          {active.length === 0 && (
-            <p className="empty">
-              Você ainda não tem rotinas ativas. Crie uma abaixo.
-            </p>
-          )}
+          <h2 id="active-title">{t.activeTitle}</h2>
+          {active.length === 0 && <p className="empty">{t.emptyActive}</p>}
           {active.map((routine) => (
             <section
               className="routine managed-routine"
@@ -67,14 +73,14 @@ export default async function Manage({
               <h3 id={`routine-${routine.id}`}>{routine.name}</h3>
               <p className="schedule">
                 {maskDays(routine.weekdays)
-                  .map((day) => WEEKDAYS[day])
+                  .map((day) => weekdays[day])
                   .join(" · ")}
               </p>
               <details className="edit-panel">
-                <summary>Editar rotina: {routine.name}</summary>
+                <summary>{t.editRoutineSummary(routine.name)}</summary>
                 <form
                   action={editRoutine}
-                  aria-label={`Editar rotina ${routine.name}`}
+                  aria-label={t.editRoutineAria(routine.name)}
                 >
                   <input type="hidden" name="routineId" value={routine.id} />
                   <input type="hidden" name="returnTo" value="/rotinas" />
@@ -82,8 +88,9 @@ export default async function Manage({
                     prefix={`edit-${routine.id}`}
                     name={routine.name}
                     days={maskDays(routine.weekdays)}
+                    locale={locale}
                   />
-                  <Submit>Salvar rotina</Submit>
+                  <Submit locale={locale}>{t.saveRoutine}</Submit>
                 </form>
               </details>
               <ul className="managed-activities">
@@ -94,21 +101,23 @@ export default async function Manage({
                       <div className="managed-activity">
                         <h4>{activity.name}</h4>
                         <span className="activity-schedule">
-                          {scheduleSummary(activity, routine.weekdays)}
+                          {scheduleSummary(activity, routine.weekdays, locale)}
                           {activity.onceDate && activity.onceDate < today
-                            ? " \u00b7 Data encerrada"
+                            ? t.pastDateTag
                             : ""}
                         </span>
                         <p className="schedule">
                           {activity.scheduledTime
                             ? `${activity.scheduledTime} · São Paulo`
-                            : "Sem horário definido"}
+                            : t.noTimeSet}
                         </p>
                         <details className="edit-panel">
-                          <summary>Editar atividade: {activity.name}</summary>
+                          <summary>
+                            {t.editActivitySummary(activity.name)}
+                          </summary>
                           <form
                             action={editActivity}
-                            aria-label={`Editar atividade ${activity.name}`}
+                            aria-label={t.editActivityAria(activity.name)}
                           >
                             <input
                               type="hidden"
@@ -130,24 +139,26 @@ export default async function Manage({
                                 onceDate: activity.onceDate,
                               }}
                               today={today}
+                              locale={locale}
                             />
-                            <Submit>Salvar atividade</Submit>
+                            <Submit locale={locale}>{t.saveActivity}</Submit>
                           </form>
                         </details>
                         <ArchiveForm
                           kind="activity"
                           id={activity.id}
                           name={activity.name}
+                          locale={locale}
                         />
                       </div>
                     </li>
                   ))}
               </ul>
               <details className="edit-panel">
-                <summary>Adicionar atividade em {routine.name}</summary>
+                <summary>{t.addActivitySummary(routine.name)}</summary>
                 <form
                   action={createActivity}
-                  aria-label={`Adicionar atividade em ${routine.name}`}
+                  aria-label={t.addActivityAria(routine.name)}
                 >
                   <input type="hidden" name="routineId" value={routine.id} />
                   <input type="hidden" name="returnTo" value="/rotinas" />
@@ -155,16 +166,22 @@ export default async function Manage({
                     prefix={`new-${routine.id}`}
                     routineWeekdays={routine.weekdays}
                     today={today}
+                    locale={locale}
                   />
-                  <Submit>Adicionar atividade</Submit>
+                  <Submit locale={locale}>{t.addActivityBtn}</Submit>
                 </form>
               </details>
-              <ArchiveForm kind="routine" id={routine.id} name={routine.name} />
+              <ArchiveForm
+                kind="routine"
+                id={routine.id}
+                name={routine.name}
+                locale={locale}
+              />
               {routine.activities.some(
                 (activity) => activity.archivedAt !== null,
               ) && (
                 <details className="archived-list">
-                  <summary>Atividades arquivadas desta rotina</summary>
+                  <summary>{t.archivedActivitiesSummary}</summary>
                   <ul>
                     {routine.activities
                       .filter((activity) => activity.archivedAt !== null)
@@ -174,7 +191,7 @@ export default async function Manage({
                           {activity.scheduledTime
                             ? ` · ${activity.scheduledTime}`
                             : ""}{" "}
-                          — arquivada
+                          {t.archivedSuffix}
                         </li>
                       ))}
                   </ul>
@@ -188,19 +205,16 @@ export default async function Manage({
           action={createRoutine}
           aria-labelledby="new-title"
         >
-          <h2 id="new-title">Criar uma rotina</h2>
+          <h2 id="new-title">{t.createRoutineTitle}</h2>
           <input type="hidden" name="returnTo" value="/rotinas" />
-          <RoutineFields prefix="manage-new" />
-          <Submit>Criar rotina</Submit>
+          <RoutineFields prefix="manage-new" locale={locale} />
+          <Submit locale={locale}>{t.createRoutineBtn}</Submit>
         </form>
         <section className="archive-section" aria-labelledby="archived-title">
-          <h2 id="archived-title">Rotinas arquivadas</h2>
-          <p className="hint">
-            Permanecem guardadas com suas atividades. Não entram na agenda de
-            hoje.
-          </p>
+          <h2 id="archived-title">{t.archivedTitle}</h2>
+          <p className="hint">{t.archivedHint}</p>
           {archived.length === 0 ? (
-            <p className="hint">Nenhuma rotina arquivada.</p>
+            <p className="hint">{t.noArchived}</p>
           ) : (
             <ul>
               {archived.map((routine) => (
@@ -208,7 +222,7 @@ export default async function Manage({
                   <h3>{routine.name}</h3>
                   <p className="schedule">
                     {maskDays(routine.weekdays)
-                      .map((day) => WEEKDAYS[day])
+                      .map((day) => weekdays[day])
                       .join(" · ")}
                   </p>
                   <ul>
@@ -228,7 +242,7 @@ export default async function Manage({
         </section>
       </main>
       <footer>
-        Rotina Pet <span>Um passo de cada vez.</span>
+        {dict.common.brandName} <span>{dict.common.tagline}</span>
       </footer>
     </>
   );

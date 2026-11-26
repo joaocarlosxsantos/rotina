@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Newsreader, Chivo, Silkscreen } from "next/font/google";
+import { getDictionary, intlLocale } from "../lib/i18n";
+import { getLocale } from "../lib/i18n-server";
 import "./globals.css";
 
 const newsreader = Newsreader({
@@ -32,42 +34,49 @@ export const viewport: Viewport = {
   ],
 };
 
-export const metadata: Metadata = {
-  metadataBase: new URL(baseUrl),
-  title: {
-    default: "Rotina Pet — Caderno de hábitos com um companheiro pixel",
-    template: "%s | Rotina Pet",
-  },
-  description: "Cuide da sua rotina diária, ganhe pontos e mantenha seu companheiro pixel feliz.",
-  manifest: "/manifest.webmanifest",
-  icons: {
-    icon: [
-      { url: "/icon.svg", type: "image/svg+xml" },
-      { url: "/favicon.ico", sizes: "48x48" },
-    ],
-    apple: [{ url: "/apple-icon.png", sizes: "180x180", type: "image/png" }],
-  },
-  openGraph: {
-    title: "Rotina Pet — Caderno de hábitos com um companheiro pixel",
-    description: "Cuide da sua rotina diária, ganhe pontos e mantenha seu companheiro pixel feliz.",
-    url: baseUrl,
-    siteName: "Rotina Pet",
-    locale: "pt_BR",
-    type: "website",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Rotina Pet",
-    description: "Cuide da sua rotina diária, ganhe pontos e mantenha seu companheiro pixel feliz.",
-  },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getLocale();
+  const t = getDictionary(locale);
 
-export default function RootLayout({
+  return {
+    metadataBase: new URL(baseUrl),
+    title: {
+      default: t.meta.titleDefault,
+      template: "%s | Rotina Pet",
+    },
+    description: t.meta.description,
+    manifest: "/manifest.webmanifest",
+    icons: {
+      icon: [
+        { url: "/icon.svg", type: "image/svg+xml" },
+        { url: "/favicon.ico", sizes: "48x48" },
+      ],
+      apple: [{ url: "/apple-icon.png", sizes: "180x180", type: "image/png" }],
+    },
+    openGraph: {
+      title: t.meta.titleDefault,
+      description: t.meta.description,
+      url: baseUrl,
+      siteName: t.common.brandName,
+      locale: intlLocale(locale).replace("-", "_"),
+      type: "website",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: t.common.brandName,
+      description: t.meta.description,
+    },
+  };
+}
+
+export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  const locale = await getLocale();
+
   return (
     <html
-      lang="pt-BR"
+      lang={intlLocale(locale)}
       className={`${newsreader.variable} ${chivo.variable} ${silkscreen.variable}`}
     >
       <body>{children}</body>
